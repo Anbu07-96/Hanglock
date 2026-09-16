@@ -279,7 +279,7 @@ pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
         sys::SetWindowLongPtrW(hwnd, sys::GWLP_USERDATA, me as isize);
     }
     rt.host.surface.resize(f.w() as u32, f.h() as u32);
-    rt.host.tray = Some(Tray::new(hwnd, instance));
+    rt.host.tray = Some(unsafe { Tray::new(hwnd, instance) });
     if let Some(t) = rt.host.tray.as_mut() {
         t.install(cfg.tooltip);
     }
@@ -473,7 +473,7 @@ impl Host {
 
     #[must_use]
     pub fn monitors(&self) -> Vec<Monitor> {
-        let mut v = displays::enumerate(self.hwnd);
+        let mut v = unsafe { displays::enumerate(self.hwnd) };
         if v.is_empty() {
             v.push(unsafe { displays::monitor_for(self.hwnd, 0) });
         }
@@ -746,4 +746,3 @@ unsafe fn on_pointer<A: AppHook + 'static>(
         _ => None,
     }
 }
-

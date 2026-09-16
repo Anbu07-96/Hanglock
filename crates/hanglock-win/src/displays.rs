@@ -5,7 +5,12 @@ use hanglock_core::placement::{Monitor, Rect};
 
 /// All monitors, in device px, each with the scale the window on it should use.
 #[must_use]
-pub fn enumerate(primary_hwnd: sys::HWND) -> Vec<Monitor> {
+/// Every monitor, in a stable order, with the primary first.
+///
+/// # Safety
+/// `primary_hwnd` is handed to `MonitorFromWindow` and friends, which dereference it;
+/// live-or-null is the caller's guarantee.
+pub unsafe fn enumerate(primary_hwnd: sys::HWND) -> Vec<Monitor> {
     // EnumDisplayMonitors is the only API that yields *every* monitor; it takes a callback, which a
     // no-unsafe-core design would rather not export, so the monitors are walked via the pair of
     // calls that need no callback: MonitorFromWindow for the current one, and

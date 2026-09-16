@@ -38,7 +38,10 @@ pub struct MenuState {
 
 impl Tray {
     #[must_use]
-    pub fn new(hwnd: sys::HWND, instance: sys::HMODULE) -> Self {
+    /// # Safety
+    /// `hwnd`/`instance` reach `Shell_NotifyIconW`/`CreateIcon`; both must be live handles of
+    /// this process (the window may not exist yet, the icon is only staged here).
+    pub unsafe fn new(hwnd: sys::HWND, instance: sys::HMODULE) -> Self {
         Self {
             uid: 1,
             hicon: unsafe { icon::create(instance) },
