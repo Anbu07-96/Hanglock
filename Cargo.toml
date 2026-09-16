@@ -33,6 +33,12 @@ cast_lossless = "allow"
 missing_errors_doc = "allow"
 must_use_candidate = "allow"
 similar_names = "allow"
+# RopeConfig re-exported as rope::RopeConfig is the name we want on the door; renaming to
+# dodge the lint would make the door worse than the hallway.
+module_name_repetitions = "allow"
+# Vec2::add/sub stay inherent on purpose — see docs/architecture.md: the solver's arithmetic
+# stays visible at call sites; a general linear-algebra surface is the liability here.
+should_implement_trait = "allow"
 too_many_arguments = "allow"
 struct_excessive_bools = "allow"
 items_after_statements = "allow"
