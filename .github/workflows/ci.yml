@@ -53,7 +53,11 @@ jobs:
             exit 1; }
           cat golden.log face_data.log
       - name: Bench (informational)
-        run: tools/ci/run-and-annotate.sh bench_300 bench.log -- cargo run --release -p hanglock -- --bench 300
+        # The gate is the run: it must compile, paint and exit 0. The notice is so the measured
+        # number lands in the run's record rather than only in a step log (see tools/ci/notice.py).
+        run: |
+          tools/ci/run-and-annotate.sh bench_300 bench.log -- cargo run --release -p hanglock -- --bench 300
+          python3 tools/ci/notice.py "bench 300 frames" bench.log 5
       - name: Asset provenance
         # No artwork may enter the repo without a provenance line (docs/research/ip-boundaries.md).
         # With no binary assets today, the check is that the set stays explained.
@@ -113,7 +117,8 @@ jobs:
       - name: "Smoke: the binary runs headless on Windows"
         # Each mode is the one the docs claim works with no desktop, and each one's output is kept:
         # a red smoke step has to say *why* in a channel the analysis environment can read, not just
-        # that it went red.
+        # that it went red. The notices put the measured lines in the record; they are PowerShell so
+        # that a gate that passed cannot be turned red by the notice itself.
         shell: pwsh
         run: |
           $exe = "target/${{ matrix.arch }}/release/hanglock.exe"
@@ -123,12 +128,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { python tools/ci/emit.py "smoke bench ${{ matrix.arch }}" bench.txt; exit 1 }
           & $exe --dump-scene scene.png 2>&1 | Tee-Object -FilePath dump.txt
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path scene.png)) { python tools/ci/emit.py "smoke dump ${{ matrix.arch }}" dump.txt; exit 1 }
+          $d = ((Get-Content diag.txt | Where-Object { $_ -ne "" }) -join " / ") -replace "::", ":"
+          Write-Host "::notice title=smoke diag ${{ matrix.arch }}::$d"
+          $b = (((Get-Content bench.txt | Where-Object { $_ -ne "" }) | Select-Object -Last 5) -join " / ") -replace "::", ":"
+          Write-Host "::notice title=smoke bench ${{ matrix.arch }}::$b"
+          Write-Host "::notice title=smoke scene ${{ matrix.arch }}::$((Get-Item scene.png).Length) bytes written by --dump-scene"
       - name: Size gate
         shell: pwsh
         run: |
           $exe = Get-Item "target/${{ matrix.arch }}/release/hanglock.exe"
           $kb = [math]::Ceiling($exe.Length / 1KB)
           Write-Host "hanglock.exe = $kb KB (budget 2048 KB)"
+          Write-Host "::notice title=exe size ${{ matrix.arch }}::$kb KB of a 2048 KB budget ($($exe.Length) bytes)"
           if ($kb -gt 2048) { "::error::executable is $kb KB, over the 2048 KB budget"; exit 1 }
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
