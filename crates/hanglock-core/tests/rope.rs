@@ -75,7 +75,14 @@ fn a_hard_flick_stays_within_tolerance() {
     let mut worst = 1.0_f64;
     for i in 0..120 {
         let x = r.anchor.x + 240.0 * (i as f64 / 4.0).sin();
-        r.move_drag(Vec2::new(x, r.anchor.y + 150.0), Vec2::new(3600.0, 0.0));
+        // The pointer's velocity has to be *this* sweep's derivative, because that is what a hand
+        // produces and what the reviewed number was measured with (`cmd_metrics`, "a hard but
+        // humanly reachable flick"). A constant +3600 px/s while the cursor is travelling left
+        // tells the solver the node is going one way and teleports it the other; that input is the
+        // torture case below, not a flick, and it stretches the cord to 1.10x on *both*
+        // implementations — the bound here is for the reachable one.
+        let vx = 240.0 * (i as f64 / 4.0).cos() / 4.0 * 60.0;
+        r.move_drag(Vec2::new(x, r.anchor.y + 150.0), Vec2::new(vx, 0.0));
         r.step(1.0 / 60.0);
         worst = worst.max(r.max_stretch());
     }
@@ -129,8 +136,11 @@ fn torture_input_stays_bounded_and_recovers() {
 fn the_anchor_is_pinned_and_heavier_at_the_end() {
     let r = rope();
     assert_eq!(r.nodes[0].inv_mass, 0.0, "anchor must be immovable");
+    // Heavier means a *smaller* inverse mass, and the comparison that matters is with a cord node:
+    // `mass_card` is 1.0, so the plate's own inverse mass is exactly 1.0 and `< 1.0` could never
+    // hold no matter how light the cord was made. Compare the two the claim is about.
     assert!(
-        r.nodes[r.nodes.len() - 1].inv_mass < 1.0,
+        r.nodes[r.nodes.len() - 1].inv_mass < r.nodes[1].inv_mass,
         "the plate must be heavier than a cord node"
     );
     assert_eq!(r.nodes.len(), RopeConfig::default().segments + 1);
@@ -158,20 +168,44 @@ fn a_release_keeps_its_momentum() {
         prev = next;
         r.step(1.0 / 60.0);
     }
-    let start = r.card_centre().x - r.anchor.x;
+    let at0 = r.card_centre();
+    let start = at0.x - r.anchor.x;
+    let a0 = (at0.x - r.anchor.x).atan2(at0.y - r.anchor.y);
+    let mut lo = a0;
+    let mut hi = a0;
     r.end_drag();
     let mut extreme = start;
     for _ in 0..600 {
         r.step(1.0 / 60.0);
-        let d = r.card_centre().x - r.anchor.x;
+        let c = r.card_centre();
+        let ang = (c.x - r.anchor.x).atan2(c.y - r.anchor.y);
+        if ang < lo {
+            lo = ang;
+        }
+        if ang > hi {
+            hi = ang;
+        }
+        let d = c.x - r.anchor.x;
         if d > extreme {
             extreme = d;
         }
     }
     let carried = extreme - start;
+    // The measure is the arc in degrees, because that is what this scenario's reviewed number is:
+    // `cmd_metrics` §4 brings the plate up to 425.5 px/s along the cord's own arc and reports 86.5
+    // deg of peak-to-peak swing against 83.1 deg for an undamped pendulum on the same length — the
+    // cord gives a little back, so the arc is *more* than a rigid rod would describe, not less.
+    // A straight-line carry cannot be the measure here: the release lands at +36 deg of a ±52 deg
+    // sector, so the most any throw can carry in x is what is left between there and the stop — a
+    // few tens of px, and 34.8 was the answer both implementations gave to `> 60`.
+    let span = (hi - lo).to_degrees();
     assert!(
-        carried > 60.0,
-        "throw carried only {carried:.1} px sideways: momentum was lost"
+        span > 80.0,
+        "the throw described only {span:.1} deg of arc: momentum was lost"
+    );
+    assert!(
+        carried > 0.0,
+        "the plate did not keep travelling the way it was thrown: {carried:.1} px"
     );
     assert!(
         extreme.abs() <= r.hang * (r.cfg.sweep_deg.to_radians().sin()) + 2.0,
@@ -317,6 +351,9 @@ fn refitting_preserves_motion_instead_of_resetting() {
     r.refit(1.5, 190.0);
     let speed_after = r.nodes[r.nodes.len() - 1].displacement().len();
     assert!(speed_after > 1e-6, "a resize discarded the rope's motion");
+    assert!(
+        speed_after < speed_before * 4.0,
+        "a resize invented motion: {speed_before} px/step became {speed_after}"
+    );
     assert!(!r.sleeping, "a resize must wake the solver");
-    let _ = speed_before;
 }

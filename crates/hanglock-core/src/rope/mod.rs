@@ -186,12 +186,31 @@ impl Rope {
         let hang = (hang_logical * scale).max(24.0);
         let seg = (hang / self.cfg.segments.max(1) as f64).max(0.5);
         let rebuild = (seg - self.seg_len).abs() > 1e-9;
+        // Growth is applied to the motion as well as to the geometry: the same swing at 200 % of
+        // the size *is* twice the pixel velocity, and `reset` would hand the cord a zero velocity
+        // and let it fall dead. Read before the rebuild, because the rebuild overwrites it.
+        let growth = if self.seg_len > 1e-9 {
+            seg / self.seg_len
+        } else {
+            1.0
+        };
+        let carried: Vec<Vec2> = if rebuild {
+            self.nodes.iter().map(|n| n.displacement().scale(growth)).collect()
+        } else {
+            Vec::new()
+        };
+        let (theta, omega) = (self.att.theta, self.att.omega);
         self.scale = scale;
         self.hang = hang;
         self.seg_len = seg;
         if rebuild {
             let angle = Card::lean(self.card_centre(), self.nodes[1].pos);
             self.reset(angle);
+            for (node, delta) in self.nodes.iter_mut().zip(&carried) {
+                node.prev = node.pos.sub(*delta);
+            }
+            self.att.theta = theta;
+            self.att.omega = omega;
         }
         self.wake();
     }
