@@ -12,24 +12,46 @@
 
 ## 1. The thing that must be read first
 
-**The prototype has not been compiled or run.** This build box has no Rust toolchain and crates.io is
-unreachable (only `github.com` answers), so `cargo build`, `cargo test` and the Windows overlay itself
-could not be executed here. What *was* executed, repeatedly, is a runnable reference model of the same
-algorithms and the same painter (§4), which is where the physics was designed, measured and tuned; the
-Rust implementation is a transcription of it, and a test locks the two together.
+**The prototype compiles, its 60 tests pass, and its release binary runs — on Linux, Windows `x64` and
+Windows `arm64`.** That sentence was not true when the first draft of this report was written: this build
+box has no Rust toolchain and crates.io is unreachable (only `github.com` answers), so nothing here could
+be compiled locally and every Rust number in this report is CI's. What *was* executed here, repeatedly, is
+a runnable reference model of the same algorithms and the same painter (§4), which is where the physics was
+designed, measured and tuned; the Rust implementation is a transcription of it, and a test locks the two
+together.
 
-Consequences to accept before opening it:
+What the first real compile and the first real test run found, in three buckets:
 
-* Expect first-build fixes: type errors, borrow-checker friction, unused imports. Every file was parsed
-  with a real Rust grammar (`tree-sitter-rust`) so the syntax and structure are sound, but a grammar is
-  not a type checker.
-* The `unsafe` Win32 layer is the highest-risk area, precisely because it is where a compiler would
-  normally catch a wrong signature. Mitigations built in: `size_of` assertions on every `#[repr(C)]`
-  struct, a bounded `unsafe` surface (four files), `GetProcAddress` for the two post-2016 imports so a
-  missing export degrades instead of failing to load, and `docs/windows-overlay-notes.md` carrying a
-  seven-item verify list ordered by what a failure would look like.
-* Nothing in §5's table is a measured Rust number. Do not treat a row as a result until
-  `scripts/gate-a.ps1` has run on a Windows machine.
+* **Two genuine bugs, both invisible to every check available before CI.** `text_present_rect` computed
+  the digits-only update box in canvas-local px and then clamped it against the *display-global* layout
+  frame; on any placement that is not a left-aligned full-width window the intersection inverted (699.79
+  against 139.5), `Surface::present` clamped the degenerate box away, and the update copied **nothing** —
+  a minute that changed the number of digits left the old glyphs on screen until the next full present. It
+  clamps to the canvas now, and returns `None` — `PresentFull` — rather than a silent no-op, so the same
+  mixup degrades instead of vanishing. The second: `Rope::refit` promised to keep "the current motion so
+  the change swings into place rather than snapping", while `reset()` rebuilt the nodes with `prev = pos`
+  — so every DPI change or hang change stopped the clock dead and dropped it. That promise is the one
+  `docs/windows-overlay-notes.md` tells the first build to verify, and it failed the moment a test ran.
+  Both are fixed, both are asserted.
+* **Assertions that had never been executed disagreed with the reviewed numbers — about their own inputs,
+  not about the model.** The reference reproduces the shipped solver to 1e-4 px on the golden trace, so
+  where a rope test failed the suspect was the test: the flick test was driving its cursor *against* its
+  own velocity (the torture case of the test below it, and it reported 1.103 where the reviewed sweep
+  reaches 1.0248 against the same unchanged bound); `a_release_keeps_its_momentum` asked for 60 px of
+  straight-line carry from a release the sector bounds to a few tens of px, where both implementations
+  measure the reviewed quantity — 86.5° of arc against 83.1° undamped — correctly; and one assertion
+  compared the plate's inverse mass with 1.0, which is the plate's own mass. The tolerance in the golden
+  trace and the 1.03 stretch bound were not touched, in either direction.
+* **The `unsafe` Win32 layer** was the highest-risk area precisely because a compiler is what normally
+  catches a wrong signature. It needed the same first-round fixes as the rest of the workspace (type and
+  borrow errors, and a `cfg` gate so a Linux `cargo test` does not try to link `user32`), and it now
+  compiles, links and runs headless on both Windows ABIs. The mitigations held their weight: `size_of`
+  assertions on every `#[repr(C)]` struct, a bounded `unsafe` surface (four files), `GetProcAddress` for
+  the two post-2016 imports so a missing export degrades instead of failing to load, and
+  `docs/windows-overlay-notes.md` carrying a verify list ordered by what a failure would look like.
+
+Still owed, and CI cannot supply it: §4's hardware rows. Do not treat a *budget* row as a result until
+`scripts/gate-a.ps1` has run on a Windows machine with a desktop.
 
 ## 2. What was implemented
 
@@ -135,11 +157,12 @@ is stated in a comment.
 
 | Gate | Status here |
 |---|---|
-| Rust syntax of all 39 `.rs` files, real Rust grammar | **0 errors** (`tree-sitter-rust`; the check also caught a dropped `impl Host {`, a tuple-pattern type error in the settings parser, a channel-order bug in the painter, and a mis-parenthesised destructuring) |
-| `cargo fmt --check`, `clippy -D warnings`, `cargo test --workspace` | **not run — no toolchain.** CI runs all three on `ubuntu-latest` and `windows-latest` (x64 + arm64) |
-| Test suite: 60 `#[test]` functions (13 solver, 11 settings, 8 placement, 7 painter, 13 model, 1 golden trace, 7 clock) | **written, not executed** |
-| Face generator reproducibility | `gen_face.py` output is diffed in CI, so `face_data.rs` cannot drift from the reviewed geometry |
-| Size gate | CI fails above 2 048 KB; `build.ps1` throws likewise |
+| Rust syntax of all 39 `.rs` files, real Rust grammar | **0 errors** (`tree-sitter-rust`; the check also caught a dropped `impl Host {`, a tuple-pattern type error in the settings parser, a channel-order bug in the painter, and a mis-parenthesised destructuring). It is now a curiosity: it was standing in for a compiler, and the compiler ran |
+| `cargo fmt --check`, `clippy -D warnings`, `cargo test --workspace` | **green on `ubuntu-latest`, `windows-latest` (x64) and `windows-11-arm`** — run `35160471461` |
+| Test suite: 60 `#[test]` functions (13 solver, 11 settings, 8 placement, 7 painter, 13 model, 1 golden trace, 7 clock) | **executed and green on all three targets**; nothing ignored, nothing filtered. Four of the 13 solver tests had never passed, and that is §1's second bucket |
+| The release binary on Windows with no desktop | **green:** `--diag`, `--bench 200` and `--dump-scene` are run by CI on x64 and arm64, and the PNG they write is the same size on both |
+| Generated artefacts are current | CI re-runs both generators and compares content: the committed golden trace must reproduce to 5e-7 px per node and its JSON byte-for-byte, and `face_data.rs` must be `gen_face.py`'s output modulo layout. Neither can fossilise quietly |
+| Size gate | CI fails above 2 048 KB; `build.ps1` throws likewise. Measured: **312 KB** on x64, **271 KB** on arm64 |
 
 Test philosophy, since one of them looks unusual: the golden trace replays 150 frames of a scripted
 drag-and-release against `tests/golden/trace_drag_settle.txt` at 1e-4 px per node. Property tests cannot
@@ -149,7 +172,12 @@ solver from parting company.
 
 ## 6. Known issues
 
-1. **Uncompiled.** The dominant risk; see §1. Budget a first-build session for type and borrow fixes.
+1. **Compiled, tested and smoke-run — but never seen on a desktop.** The first-build session an earlier
+   draft of this line asked for happened in CI, and §1 is what it found: two real bugs and four assertions
+   that had never run. The ABI questions CI can settle (`size_of` on every `#[repr(C)]` struct, the link on
+   both Windows ABIs, a headless `--diag`) are settled. The tray, what a present actually shows,
+   click-through, a DPI change made in Settings and sleep/resume are not — `docs/windows-overlay-notes.md`
+   keeps that list in order of what a failure would look like.
 2. **Gate A's hardware rows are empty by construction**, and one target may simply miss: if a full
    present at 150 %/60 Hz measures poorly on a weak iGPU, the answer is the recorded fallback (a
    DirectComposition presenter inside `surface.rs`), not an architecture change.
@@ -197,21 +225,25 @@ docs/decisions/0002-zero-dependencies.md
 docs/previews/*.png (6)
 ```
 
-**Sizes.** 7 064 lines of Rust in 39 files: 6 367 in `src` plus 697 in `tests/`. `hanglock-win` is
-2 100 of those, 631 being the `sys.rs` declarations; every line of `unsafe` sits in that crate, and
+**Sizes.** 9 466 lines of Rust in 39 files: 8 497 in `src` plus 969 in `tests/`. `hanglock-win` is 2 363
+of those, 700 being the `sys.rs` declarations; every line of `unsafe` sits in that crate, and
 `hanglock-core`, `hanglock-render` and `hanglock-platform` carry `#![forbid(unsafe_code)]`. The Python
-reference model the physics was tuned against is ~700 lines and is not shipped. 60 `#[test]` functions exist — 13 solver,
-11 settings, 8 placement, 7 painter, 13 model/geometry, 1 golden trace, plus 7 clock-formatting tests
-in-crate. **None have been executed here.**
+reference model the physics was tuned against is 889 lines (`tools/model/hanglock_ref.py`, plus 99 in
+`gen_face.py`) and is not shipped. 60 `#[test]` functions exist — 13 solver, 11 settings, 8 placement,
+7 painter, 13 model/geometry, 1 golden trace, plus 7 clock-formatting tests in-crate — **and all of them
+run in CI on three targets**, alongside the crates' doc examples. The counts in this section were
+measured with `git ls-files '*.rs' | xargs wc -l` and `git grep -c '#\[test\]'`; the ones before the
+review were remembered rather than counted, which is the same failure as §1's second bucket.
 
 ## 8. Commit and push
 
 | | |
 |---|---|
 | Branch | `arena/01a0a5bc-hanglock` |
-| Commit | one squashed commit on the branch, *"feat: the first runnable Hanglock prototype, and the plan it came from"*, on top of `3d2fcb4`; its own hash cannot be written inside itself, so: `git log -1 --format='%h %s' arena/01a0a5bc-hanglock` |
-| Tree | 78 files added/changed, working tree clean |
-| Push | **failed** — `fatal: could not read Username for 'https://github.com'`: the GitHub token Arena injects for this session is expired, so `git push` and `gh` cannot authenticate. Same failure as Phase 0. Fix: reconnect GitHub in Arena, then `git push origin arena/01a0a5bc-hanglock`. Nothing has been pushed to `main`; the repo's only remote branch remains `3d2fcb4`. |
+| Head | `2654554`, 38 commits on top of `3d2fcb4`, working tree clean. The shape of the phase: `0ccfe31` (*"feat: the first runnable Hanglock prototype, and the plan it came from"*, the single squashed commit this phase was meant to ship as) and then the rounds that only a real toolchain could produce — the fidelity fixes, the CI channel, the review of the tests themselves |
+| Push | done. `main` is untouched at `3d2fcb4` and is an ancestor of HEAD, so the merge can be a fast-forward; nothing here rewrites a pushed commit, on instruction |
+| CI | **green** — run `35160471461`, every step of all three jobs: Linux (fmt, clippy, tests, generated-artefact currency, bench, asset provenance) and Windows x64 + arm64 (clippy, tests, release link, headless smoke, size gate, artifacts) |
+| Merge | not performed, on instruction: this phase ends as a PR against `main` |
 
 ## 9. What to review, in the order that saves time
 
@@ -219,6 +251,8 @@ in-crate. **None have been executed here.**
    weight of the digits and the cord's treatment are all in `theme.rs` and `face_data` generation.)
 2. The feel numbers in §4 — is 86.5° of carry with a 2.1 s settle the right temperament, or should it be
    livelier (lower `friction_acc`, `natural` posture) or more obedient (`mounted`)?
-3. Whether to spend a session getting a Rust toolchain into this environment (or moving the build to a
-   Windows box / a `cargo`-capable CI run) *before* Phase 2. The next phase's main risk is not design,
-   it is that every line I cannot compile is a line the first reviewer has to fix.
+3. Two loose ends that belong to whoever merges, not to the code:
+   `.github/workflows/ci.yml` triggers on `arena/**` as well as `main` only so that this phase could be
+   CI-tested before `main` carried the file — drop the wildcard after the merge. And ADR-0001 still reads
+   *"proposed (needs owner sign-off before Phase 1)"*: Phase 1 built on it, but the sign-off line is the
+   owner's to write, not the builder's.

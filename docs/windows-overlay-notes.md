@@ -1,11 +1,15 @@
 # Windows overlay notes
 
-The 1.2k lines of `crates/hanglock-win`, and what they depend on. Written as an onboarding document,
+The 2.4k lines of `crates/hanglock-win`, and what they depend on. Written as an onboarding document,
 because this is the knowledge that makes the next person able to change it.
 
-> **Status: uncompiled.** This environment has no Rust toolchain and no crates.io
-> ([ADR-0002](decisions/0002-zero-dependencies.md)), so everything below is reasoned-from-specification,
-> not observed-in-a-debugger. Expect first-build fixes, and treat the "verify" items as the checklist.
+> **Status: it compiles, tests, links and runs headless in CI** — clippy `-D warnings` and
+> `cargo test --workspace` on Linux, Windows `x64` and Windows `arm64`, and on both Windows ABIs the
+> release link plus a `--diag`/`--bench`/`--dump-scene` smoke of the built executable. What that does
+> *not* buy: no runner has a desktop, so every
+> claim below about what Windows *shows* — the tray icon, a present, a DPI change a person made — is still
+> reasoned-from-specification rather than observed-in-a-debugger, and the verify list at the end is the
+> checklist for the first run on hardware.
 
 ## The window
 
@@ -108,7 +112,12 @@ All model geometry is in **logical** px; the display scale is applied at `Rope.s
 `Surface`/`Canvas` sizes, and converted once in `placement::place`. `WM_DPICHANGED` re-runs
 `placement` with the *saved* ratio rather than the suggested rectangle, because the suggested rect is
 sized for a normal window, not for a swept sector. Verify: 100 → 200 % while swinging must not reset
-the swing and must not detach the cord from the plate.
+the swing and must not detach the cord from the plate. The model half of that is asserted —
+`refitting_preserves_motion_instead_of_resetting` is exactly the "does not reset the swing" promise, and it
+is the test that caught `refit` handing the cord a zero velocity and letting it fall dead. What is not asserted anywhere
+is the arrival: that `WM_DPICHANGED` reaches us at all, and that the re-layout — which ignores the
+suggested rectangle on purpose and recomputes from the saved ratio — puts the clock back where the user had
+it.
 
 ## Displays
 
@@ -119,11 +128,14 @@ crate that keeps its `unsafe` in four files. `rcWork` is the per-monitor work ar
 a top-docked taskbar a data point rather than a special case. Verify with: three displays, mixed scale,
 one above the primary, and the clock on the one that gets removed.
 
-## Known-unverified list (the first build should check these in order)
+## The verify list (what the first run on a desktop should check, in order)
 
-1. That it compiles at all (types, borrows, unused imports) — `cargo clippy --workspace --all-targets`.
-2. `NOTIFYICONDATAW` size assertion (992 on x64) and that the icon appears.
-3. `UPDATELAYEREDWINDOWINFO` size (72) and that a present shows the plate rather than a black box.
+1. **Settled by CI:** that it compiles at all — types, borrows, unused imports — `cargo clippy --workspace
+   --all-targets -D warnings` on Linux, Windows `x64` and Windows `arm64`.
+2. `NOTIFYICONDATAW` size assertion (992 on x64) — **settled by the same builds**, since it is a `const`
+   check — and that the icon appears, which no headless runner can see.
+3. `UPDATELAYEREDWINDOWINFO` size (72) — likewise a `const` check, so already proved — and that a present
+   shows the plate rather than a black box, which is owed.
 4. `HitShape::contains` covering the plate *and* the ring, and only those.
 5. That `--background` + `RegSetKeyValueW` autostart round-trips, and `is_enabled` reconciles after the
    user disables it in Task Manager.

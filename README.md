@@ -18,10 +18,13 @@ it is designed to cost about nothing while you ignore it.
       └────────────────┘
 ```
 
-**Status: first prototype built, awaiting its first compile.** The workspace exists — four crates, a
-binary, ~47 tests — and the physics has been measured and tuned in a runnable reference model. This
-build environment has no Rust toolchain and no crates.io access, so Gate A's Windows numbers are still
-blank: read [docs/reports/phase-1.md](docs/reports/phase-1.md) first.
+**Status: the first prototype compiles, passes its tests and produces its binary in CI.** Every gate this
+repo has is green, across three jobs — Linux, Windows `x64`, Windows `arm64`: fmt and clippy
+`-D warnings`, 60 tests including a golden trace against the reference model, the generated artefacts
+checked against their generators, and on Windows the release link, a headless run of the built executable
+and a 2 048 KB size gate it meets at 312 KB (`x64`) / 271 KB (`arm64`). What CI cannot measure — a
+desktop, a tray, a real DPI change, idle CPU and RAM — is stated as owed in
+[docs/gate-a.md](docs/gate-a.md); the phase's record is [docs/reports/phase-1.md](docs/reports/phase-1.md).
 
 <img src="docs/previews/01-settled-light.png" width="440" alt="Hanglock's clock plate hanging from a ceiling clamp on a twisted cord, reading 10:42 PM"> <img src="docs/previews/03-settled-dark.png" width="440" alt="The same clock on a dark desktop wallpaper, kept legible by a one-pixel rim light">
 
@@ -50,11 +53,14 @@ One hanging digital clock + real rope physics + drag/swing + an Always-on-Top to
 settings. Nothing else — faces, themes, rope styles, timer, stopwatch and analog are specified for
 later phases but not built yet. See [docs/mvp.md](docs/mvp.md).
 
-## Stack (proposed)
+## Stack
 
 Rust, on the Win32 API directly: `WS_POPUP` + `WS_EX_LAYERED|TOPMOST|TOOLWINDOW|NOACTIVATE`, a
-self-owned software compositor (`tiny-skia` + a glyph atlas) presented with `UpdateLayeredWindow`,
-and per-pixel hit testing so transparent pixels pass clicks through for free. Target: **~0 % idle CPU,
+self-owned software compositor (`hanglock-render`: analytic signed-distance coverage for the cord, the
+plate, the rim and the shadow, with the digits drawn from generated geometry rather than a font file)
+presented with `UpdateLayeredWindow`, and per-pixel hit testing so transparent pixels pass clicks through
+for free. No third-party crates, in the build or in the binary
+([ADR-0002](docs/decisions/0002-zero-dependencies.md)). Target: **~0 % idle CPU,
 ~15 MB idle RAM, ≤ 4 MB installer.** Every alternative (Tauri, Electron, Flutter, WPF, Avalonia, Qt)
 is scored against those numbers in
 [docs/decisions/0001-technology-stack.md](docs/decisions/0001-technology-stack.md).

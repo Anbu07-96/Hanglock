@@ -1,19 +1,27 @@
 # Gate A — measured, and what is still owed
 
 Gate A is the performance/trust gate for Phase 1 (`docs/mvp.md` §4). It is **partially measured**: the
-model, physics and cost geometry are measured and reproducible here; the numbers that need a Windows
-desktop cannot be measured in this environment, and are stated as owed rather than invented.
+model, physics and cost geometry are measured and reproducible, in CI as well as here; the numbers that
+need a Windows desktop cannot be measured by a headless runner, and are stated as owed rather than
+invented.
 
-## Environment of this build
+## How each number below was obtained
 
-* Sandbox: Linux container, **no Rust toolchain and no crates.io access** (see
-  [ADR-0002](decisions/0002-zero-dependencies.md)). Nothing in this phase could be compiled, so
-  nothing here is a measured Rust number. The reference model in `tools/model/` is a transcription of
-  the same algorithms, and every physics number below is measured by running it.
+* The code was written in a Linux container with no Rust toolchain and no crates.io access (see
+  [ADR-0002](decisions/0002-zero-dependencies.md)), so **no Rust number here was measured on the box that
+  wrote it**: the first run of `cargo build` and `cargo test` was CI's, and CI is where the two measured
+  rows of the hardware table came from. [Run
+  35160471461](https://github.com/Anbu07-96/Hanglock/actions/runs/35160471461) at `2654554` is green on
+  `ubuntu-latest`, `windows-latest` (x64) and `windows-11-arm`: fmt, clippy `-D warnings`, the 60 tests
+  on all three targets, the golden trace, the release link, a headless smoke of the built binary on both
+  Windows ABIs, and the size gate.
+* The reference model in `tools/model/` is a transcription of the same algorithms, and every physics
+  number below was measured by running it, then asserted in Rust, and CI re-runs the assertion. The
+  golden trace is the row-by-row version of the same promise at 1e-4 px.
 * The visual design was reviewed by rendering frames with the same painter logic and looking at them.
-* Consequence for review: **`cargo test` and `cargo build` have not been run.** Expect first-compile
-  fixes; CI runs both. The syntax of all 39 files is verified with a Rust parser, which catches
-  structural errors but not types or trait mismatches.
+* Still owed, because a runner has no desktop to sit on: every row of the hardware table left below as
+  _measure_ or _observe_ — idle CPU, working set, cold start, click-through, focus, a DPI change made in
+  Settings, sleep/resume. `scripts/gate-a.ps1` measures them.
 
 ## Physics, measured (`tools/model/hanglock_ref.py metrics`)
 
@@ -77,8 +85,8 @@ release (0.1.0 ships with the numbers and an honest limitation, per the referenc
 | Working set, MB | _measure_ | ≤ 20, fail > 30 | |
 | Private bytes, MB | _measure_ | ≤ 35 | |
 | Cold start, ms | _measure_ | ≤ 150 | |
-| `--bench` paint, µs/frame | _measure_ | ≤ 400 | the only row measurable without a desktop |
-| Executable, KB | _measure_ | ≤ 2048 | |
+| `--bench` paint, µs/frame | 3 625.6 (Linux) · 3 418.8 (x64) · 3 215.2 (arm64) | ≤ 400 | the only row measurable without a desktop, so CI measured it — on shared VMs, which are not the hardware this budget is about. Treat it as an upper bound from slow neighbours, not as a pass or a miss, until it is measured on a machine. |
+| Executable, KB | **312** (x64) · **271** (arm64) | ≤ 2048 | gated in CI, and `scripts/build.ps1` throws on the same number locally |
 | Installer, KB | _measure_ | ≤ 4096 | `scripts/installer.iss` |
 | Frame loop stops when settled | _observe_ | yes | `--diag` counters: `ticks` must not grow while idle beyond the 1 Hz timer |
 | Click-through over the desktop | _observe_ | yes | click a desktop icon through the overlay's empty area |

@@ -5,11 +5,15 @@ from the top edge of the desktop on a real rope — draggable, swingable, click-
 isn't drawn, and near-zero cost while you ignore it.
 
 **Status.** Phase 1 delivered the first prototype: the workspace, the solver, the painter, the Win32
-overlay, the tray, the settings store, and ~47 tests. It has **not been compiled** — this build
-environment has no Rust toolchain and no crates.io ([why](decisions/0002-zero-dependencies.md)) — so
-read [`reports/phase-1.md`](reports/phase-1.md) before building it. The physics and the look were
-measured and reviewed in a runnable reference model, and a golden trace keeps the shipped solver honest
-to it.
+overlay, the tray, the settings store, and 60 tests. Every gate this repo has is green in CI, whose three
+jobs cover Linux, Windows `x64` and Windows `arm64`: fmt and clippy `-D warnings`, the suite including the
+golden trace, both generated artefacts against their generators, and on Windows the release link, a
+headless run of the binary and a 2 048 KB size gate it meets at 312 KB (`x64`) / 271 KB (`arm64`). The
+zero-dependency rule that keeps those numbers cheap to hold is
+[ADR-0002](decisions/0002-zero-dependencies.md). Anything that needs a desktop is owed, and listed as
+owed in [`gate-a.md`](gate-a.md); read [`reports/phase-1.md`](reports/phase-1.md) for the phase as a
+whole. The physics and the look were measured and reviewed in a runnable reference model, and a golden
+trace keeps the shipped solver honest to it.
 
 | Doc | What it answers |
 |---|---|

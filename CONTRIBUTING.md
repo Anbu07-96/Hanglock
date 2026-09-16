@@ -52,6 +52,20 @@ A change to how anything is presented or scheduled needs the numbers from
 [`scripts/gate-a.ps1`](scripts/gate-a.ps1) in the PR, even if they miss the budget. A miss with a
 written reason ships; an unmeasured change does not.
 
+## Reading a run without the web UI
+
+A red step is worth more than a red tick, so CI ships the captured text of the steps that can fail —
+`tools/ci/run-and-annotate.sh` for the shell ones, an `emit.py` call for the PowerShell ones — as gzip
+chunks in the run's annotations. `tools/ci/fetch-logs.py` puts them back into files:
+
+```sh
+python3 tools/ci/fetch-logs.py 35160471461 Linux    # -> /tmp/decoded_cargo_test.txt, one per stream
+```
+
+The reverse channel exists for the gates that *pass* and print a number worth keeping (the bench, the
+size gate): `tools/ci/notice.py` folds the tail of a captured log into a single `::notice` annotation,
+so the measurement lives in the run's record instead of only in its log. A notice cannot change a verdict.
+
 ## Pull request template
 
 Keep it short and honest: what changed, what it costs (measured), what you did not test and why.
