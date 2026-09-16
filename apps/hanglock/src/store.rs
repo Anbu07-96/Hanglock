@@ -20,12 +20,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub fn dir() -> PathBuf {
     let base = std::env::var_os("APPDATA")
         .or_else(|| std::env::var_os("XDG_CONFIG_HOME"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            std::env::var_os("HOME")
-                .map(|h| PathBuf::from(h).join(".config"))
-                .unwrap_or_else(|| PathBuf::from("."))
-        });
+        .map_or_else(
+            || {
+                std::env::var_os("HOME")
+                    .map_or_else(
+                        || PathBuf::from("."),
+                        |h| PathBuf::from(h).join(".config"),
+                    )
+            },
+            PathBuf::from,
+        );
     base.join("Hanglock")
 }
 
@@ -115,15 +119,13 @@ fn write_and_replace(
             return Ok(());
         }
     }
-    match std::fs::rename(tmp, p) {
-        Ok(()) => Ok(()),
+    if let Err(e) = std::fs::rename(tmp, p) {
         // On Windows a rename onto an existing path fails; drop it first. Losing the *old* file to
         // a failure in the gap is bounded by the fact that `tmp` was written and verified above.
-        Err(_) => {
-            let _ = std::fs::remove_file(p);
-            std::fs::rename(tmp, p).map_err(|e| format!("replace: {e}"))
-        }
+        let _ = std::fs::remove_file(p);
+        return std::fs::rename(tmp, p).map_err(|e| format!("replace: {e}"));
     }
+    Ok(())
 }
 
 #[cfg(windows)]

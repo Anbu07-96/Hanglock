@@ -58,7 +58,6 @@ pub enum Action {
 /// can be tested without one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CursorKind {
-    Arrow,
     Grab,
     Grabbing,
     /// Over the ring: dragging this moves the whole clock.
@@ -78,6 +77,10 @@ pub struct HitRegions {
 }
 
 impl HitRegions {
+    // The three predicates below are the model's own hit maths, exercised by its tests; the shipped
+    // answer is the backend's shape, which they were written to pin down. Not dead so much as
+    // test-facing: cfg(test) says so without an allow.
+    #[cfg(test)]
     #[must_use]
     pub fn contains(&self, p: Vec2) -> bool {
         if !self.interactive {
@@ -96,6 +99,7 @@ impl HitRegions {
             && (p.y - self.anchor.y).abs() <= self.anchor_radius
     }
 
+    #[cfg(test)]
     #[must_use]
     pub fn on_ring(&self, p: Vec2) -> bool {
         if !self.interactive {
@@ -105,6 +109,7 @@ impl HitRegions {
         (dx <= self.anchor_radius && dy <= self.anchor_radius) && !self.on_plate(p)
     }
 
+    #[cfg(test)]
     #[must_use]
     pub fn on_plate(&self, p: Vec2) -> bool {
         let (cs, sn) = (self.theta.cos(), self.theta.sin());
@@ -128,7 +133,6 @@ pub struct Model {
     /// narrower (`10:42` to `9:42`), and presenting only the new one would leave a fragment of the
     /// old `1` on screen for the next fifty-nine seconds.
     last_text_bounds: Rect,
-    dirty_rects: [bool; 2],
     reposition: Option<(f64, f64)>,
     pub hover_ring: bool,
     pub saved: bool,
@@ -162,7 +166,7 @@ impl Model {
             1.0,
         );
         let text = face_of(&settings, (2026, 1, 1, 10, 42, 7));
-        let m = Self {
+        Self {
             settings,
             rope,
             canvas: Canvas::new(1, 1),
@@ -173,21 +177,12 @@ impl Model {
             layout_scale: 1.0,
             monitor: None,
             last_text_bounds: Rect::new(0.0, 0.0, 0.0, 0.0),
-            dirty_rects: [false; 2],
             reposition: None,
             hover_ring: false,
             saved: false,
             counters: Counters::default(),
             seconds_since_last_text: 0.0,
-        };
-        m
-    }
-
-    /// True while a ring drag is moving the whole clock. The adapter uses it to decide whether a
-    /// release commits a position or simply ends a swing.
-    #[must_use]
-    pub fn is_repositioning(&self) -> bool {
-        self.reposition.is_some()
+        }
     }
 
     /// Recompute where the overlay goes from the current monitor list. Returns the frame the
@@ -203,7 +198,7 @@ impl Model {
         );
         let scale = self.layout_scale;
         let card = card_for(&self.settings);
-        let anchor = self.anchor_in_frame(self.layout_frame, scale);
+        let anchor = Self::anchor_in_frame(self.layout_frame, scale);
         // The rope lives in device px, and its host rect is the frame: the reach clamp plus this
         // rect are what keep the plate on the display it belongs to.
         self.rope.scale = scale;
@@ -233,7 +228,7 @@ impl Model {
 
     /// The anchor within the frame, device px: horizontally the frame's centre unless the user has
     /// nudged the clock along the top edge, vertically a fixed inset for the clamp.
-    fn anchor_in_frame(&self, frame: Rect, scale: f64) -> Vec2 {
+    fn anchor_in_frame(frame: Rect, scale: f64) -> Vec2 {
         Vec2::new(frame.w() * 0.5, 14.0 * scale)
     }
 
@@ -339,7 +334,7 @@ impl Model {
                         self.settings.overlay.anchor_ratio = ratio;
                         let frame = self.compute_frame(&m);
                         self.layout_frame = frame;
-                        let anchor = self.anchor_in_frame(frame, scale);
+                        let anchor = Self::anchor_in_frame(frame, scale);
                         self.rope.host =
                             Some(Rect::new(0.0, 0.0, frame.w().max(1.0), frame.h().max(1.0)));
                         self.rope.anchor = anchor;
@@ -360,15 +355,14 @@ impl Model {
                     }
                 }
             }
-            Input::Release { at, mut vel } => {
-                let _ = at;
+            Input::Release { .. } => {
                 if let Some((_, _)) = self.reposition.take() {
                     out.push(Action::Save);
                     out.push(Action::Relayout);
                 } else if self.rope.is_dragging() {
                     // The adapter's `vel` is only valid for moves; on release the last move's
-                    // velocity is the truth, so the drag keeps whatever it was tracking.
-                    vel = self.rope.drag.vel;
+                    // velocity is the truth, so the drag keeps whatever it was tracking —
+                    // nothing to assign, nothing to override.
                     self.rope.end_drag();
                     self.state = State::Swinging;
                     out.push(Action::PresentFull);
@@ -477,8 +471,8 @@ impl Model {
     pub fn on_system(&mut self, event: hanglock_platform::SystemEvent) -> Vec<Action> {
         match event {
             hanglock_platform::SystemEvent::DisplaysChanged
-            | hanglock_platform::SystemEvent::Relayout => vec![Action::Relayout],
-            hanglock_platform::SystemEvent::DpiChanged => vec![Action::Relayout],
+            | hanglock_platform::SystemEvent::Relayout
+            | hanglock_platform::SystemEvent::DpiChanged => vec![Action::Relayout],
             hanglock_platform::SystemEvent::Resumed => {
                 // Drop the accumulated deficit rather than paying it: the rope has not been moving
                 // while the machine slept, and "catching up" would look like a teleport. Re-read
@@ -534,16 +528,11 @@ impl Model {
 
     #[must_use]
     pub fn cursor(&self) -> CursorKind {
-        if self.rope.is_dragging() {
-            if self.reposition.is_some() {
-                CursorKind::Move
-            } else {
-                CursorKind::Grabbing
-            }
-        } else if self.reposition.is_some() {
+        let rep = self.reposition.is_some();
+        if rep || self.hover_ring {
             CursorKind::Move
-        } else if self.hover_ring {
-            CursorKind::Move
+        } else if self.rope.is_dragging() {
+            CursorKind::Grabbing
         } else {
             // Any pixel that reaches us is on the plate or the ring, because everything else answers
             // HTTRANSPARENT, so there is no "over the background" cursor to decide about.
@@ -811,8 +800,7 @@ mod tests {
         let f = m.layout_frame;
         assert!(
             f.x0 >= -0.01 && f.x1 <= 1920.0 + 0.01,
-            "frame {:?} escaped the monitor",
-            f
+            "frame {f:?} escaped the monitor"
         );
         assert!(f.y0 >= -0.01);
         assert!(m.rope.anchor.x > 0.0 && m.rope.anchor.x < f.w());
@@ -849,7 +837,7 @@ mod tests {
             }
         }
         assert!(
-            m.wants_ticks() == false,
+            !m.wants_ticks(),
             "the app never stopped asking for frames"
         );
         assert!(

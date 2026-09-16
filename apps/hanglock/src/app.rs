@@ -35,7 +35,7 @@ pub struct Adapter {
 }
 
 pub fn run(settings: Settings) -> ExitCode {
-    let mut adapter = Adapter {
+    let adapter = Adapter {
         model: Model::new(settings),
         pushed_topmost: None,
         pushed_ignore: None,
@@ -130,8 +130,7 @@ impl AppHook for Adapter {
         let monitors = host.monitors();
         self.primary = monitors
             .iter()
-            .find(|m| m.primary)
-            .map(|m| m.index)
+            .find_map(|m| (m.primary).then_some(m.index))
             .unwrap_or(0);
         let frame = self.model.relayout(&monitors, self.primary);
         host.set_frame(frame);
@@ -201,7 +200,6 @@ impl AppHook for Adapter {
 
     fn cursor(&self) -> hanglock_win::window::Cursor {
         match self.model.cursor() {
-            CursorKind::Arrow => hanglock_win::window::Cursor::Arrow,
             CursorKind::Grab => hanglock_win::window::Cursor::Grab,
             CursorKind::Grabbing => hanglock_win::window::Cursor::Grabbing,
             CursorKind::Move => hanglock_win::window::Cursor::Move,

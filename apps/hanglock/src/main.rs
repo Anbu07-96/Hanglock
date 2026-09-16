@@ -18,6 +18,10 @@
 //! and what it costs — can be checked on a machine with no display, including CI.
 
 mod app;
+// On non-Windows builds the interaction surface (`on_input`, commands, cursors) has no driver —
+// the adapter that calls it is the Windows-only half — but the model must stay whole so the same
+// code is what ships and what is tested. Alive by contract, not by local callers.
+#[cfg_attr(not(windows), allow(dead_code))]
 mod model;
 mod store;
 
