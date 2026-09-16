@@ -11,6 +11,11 @@
 //! stopping completely when nothing is moving. Frameworks either expose none of them, or expose them
 //! as flags that fight each other. Here each is one function with a comment saying what it is for.
 
+// The whole crate is the Windows backend: its extern blocks name user32/gdi32/shell32, and a
+// non-Windows linker has no chance of satisfying them (cargo check passes, cargo test's harness
+// link does not). Compiled only where those libraries exist — mirroring apps/hanglock's app.rs.
+#![cfg(windows)]
+
 // Win32 geometry arrives and leaves as `int`/`DWORD`. These casts retype screen-space quantities
 // that are bounded by the display modes they came from; try_from at every FFI edge would bury the
 // calls that genuinely need auditing in arithmetic that cannot fail in practice.
