@@ -18,8 +18,8 @@ use hanglock_core::rope::Rope;
 use hanglock_core::scene::Scene;
 use hanglock_core::settings::Settings;
 use hanglock_core::vec2::Vec2;
-use hanglock_platform::Input;
 use hanglock_platform::Command;
+use hanglock_platform::Input;
 use hanglock_render::paint::text_bounds;
 use hanglock_render::{Canvas, Theme};
 
@@ -92,7 +92,8 @@ impl HitRegions {
         }
         // The ring is a small square rather than a circle: at 16 px it is indistinguishable, and a
         // square is cheaper to reason about when someone asks why the corner of it is grabbable.
-        (p.x - self.anchor.x).abs() <= self.anchor_radius && (p.y - self.anchor.y).abs() <= self.anchor_radius
+        (p.x - self.anchor.x).abs() <= self.anchor_radius
+            && (p.y - self.anchor.y).abs() <= self.anchor_radius
     }
 
     #[must_use]
@@ -196,7 +197,10 @@ impl Model {
         self.layout_scale = chosen.scale;
         self.monitor = Some(chosen);
         self.layout_frame = self.compute_frame(&chosen);
-        let (w, h) = (self.layout_frame.w().max(1.0), self.layout_frame.h().max(1.0));
+        let (w, h) = (
+            self.layout_frame.w().max(1.0),
+            self.layout_frame.h().max(1.0),
+        );
         let scale = self.layout_scale;
         let card = card_for(&self.settings);
         let anchor = self.anchor_in_frame(self.layout_frame, scale);
@@ -299,7 +303,12 @@ impl Model {
             now.y1.max(prev.y1) + 1.0,
         );
         let f = self.layout_frame;
-        Some(Rect::new(u.x0.max(f.x0), u.y0.max(f.y0), u.x1.min(f.x1), u.y1.min(f.y1)))
+        Some(Rect::new(
+            u.x0.max(f.x0),
+            u.y0.max(f.y0),
+            u.x1.min(f.x1),
+            u.y1.min(f.y1),
+        ))
     }
 
     pub fn on_input(&mut self, input: Input) -> Vec<Action> {
@@ -324,12 +333,15 @@ impl Model {
                         let dx = at.x - start_x;
                         let scale = self.layout_scale.max(0.25);
                         let logical_dx = dx / scale;
-                        let ratio = (self.settings.overlay.anchor_ratio + logical_dx / m.bounds_logical().w().max(1.0)).clamp(0.0, 1.0);
+                        let ratio = (self.settings.overlay.anchor_ratio
+                            + logical_dx / m.bounds_logical().w().max(1.0))
+                        .clamp(0.0, 1.0);
                         self.settings.overlay.anchor_ratio = ratio;
                         let frame = self.compute_frame(&m);
                         self.layout_frame = frame;
                         let anchor = self.anchor_in_frame(frame, scale);
-                        self.rope.host = Some(Rect::new(0.0, 0.0, frame.w().max(1.0), frame.h().max(1.0)));
+                        self.rope.host =
+                            Some(Rect::new(0.0, 0.0, frame.w().max(1.0), frame.h().max(1.0)));
                         self.rope.anchor = anchor;
                         self.rope.wake();
                         out.push(Action::Move(frame));
@@ -390,7 +402,11 @@ impl Model {
         match cmd {
             Command::ToggleVisible => {
                 o.enabled = !o.enabled;
-                self.state = if o.enabled { State::Settled } else { State::Hidden };
+                self.state = if o.enabled {
+                    State::Settled
+                } else {
+                    State::Hidden
+                };
                 out.push(Action::Save);
             }
             Command::ToggleTopmost => {
@@ -413,7 +429,11 @@ impl Model {
                 out.push(Action::PresentFull);
             }
             Command::HangUp | Command::HangDown => {
-                let dir = if matches!(cmd, Command::HangUp) { 1 } else { -1 };
+                let dir = if matches!(cmd, Command::HangUp) {
+                    1
+                } else {
+                    -1
+                };
                 let cur = o.hang;
                 let next = HANG_STEPS
                     .iter()
@@ -426,7 +446,11 @@ impl Model {
                 out.push(Action::Save);
             }
             Command::Bigger | Command::Smaller => {
-                let dir = if matches!(cmd, Command::Bigger) { 1.0 } else { -1.0 };
+                let dir = if matches!(cmd, Command::Bigger) {
+                    1.0
+                } else {
+                    -1.0
+                };
                 o.scale = (o.scale + 0.15 * dir).clamp(limits::SCALE.0, limits::SCALE.1);
                 self.rope.card = card_for(&self.settings);
                 out.push(Action::Relayout);
@@ -453,7 +477,8 @@ impl Model {
 
     pub fn on_system(&mut self, event: hanglock_platform::SystemEvent) -> Vec<Action> {
         match event {
-            hanglock_platform::SystemEvent::DisplaysChanged | hanglock_platform::SystemEvent::Relayout => vec![Action::Relayout],
+            hanglock_platform::SystemEvent::DisplaysChanged
+            | hanglock_platform::SystemEvent::Relayout => vec![Action::Relayout],
             hanglock_platform::SystemEvent::DpiChanged => vec![Action::Relayout],
             hanglock_platform::SystemEvent::Resumed => {
                 // Drop the accumulated deficit rather than paying it: the rope has not been moving
@@ -474,7 +499,12 @@ impl Model {
 
     #[must_use]
     pub fn scene(&self) -> Scene {
-        Scene::new(&self.rope, &self.rope.cfg, self.text, self.settings.overlay.opacity)
+        Scene::new(
+            &self.rope,
+            &self.rope.cfg,
+            self.text,
+            self.settings.overlay.opacity,
+        )
     }
 
     pub fn paint(&mut self) {
@@ -577,7 +607,13 @@ fn card_for(s: &Settings) -> CardSpec {
     // solver together.
     let base = CardSpec::default();
     let k = s.overlay.scale;
-    CardSpec { width: base.width * k, height: base.height * k, bracket: base.bracket, corner: base.corner, hang: s.overlay.hang }
+    CardSpec {
+        width: base.width * k,
+        height: base.height * k,
+        bracket: base.bracket,
+        corner: base.corner,
+        hang: s.overlay.hang,
+    }
 }
 
 fn posture_of(s: &Settings) -> Posture {
@@ -591,10 +627,21 @@ fn posture_of(s: &Settings) -> Posture {
 
 fn face_of(s: &Settings, fields: (u32, u32, u32, u32, u32, u32)) -> FaceText {
     let (year, month, day, hour, minute, second) = fields;
-    let c = Civil { year: i64::from(year), month, day, hour, minute, second };
+    let c = Civil {
+        year: i64::from(year),
+        month,
+        day,
+        hour,
+        minute,
+        second,
+    };
     hanglock_core::clock::format::format(
         &c,
-        &FaceOptions { hour12: s.face.hour12, seconds: s.face.seconds, meridiem: s.face.meridiem },
+        &FaceOptions {
+            hour12: s.face.hour12,
+            seconds: s.face.seconds,
+            meridiem: s.face.meridiem,
+        },
     )
 }
 
@@ -666,10 +713,22 @@ pub fn bench(settings: &Settings, n: usize) {
     let (w, h) = m.canvas.size();
     let per = dt.as_nanos() as f64 / n.max(1) as f64;
     println!("hanglock bench: {n} frames at {w}x{h}");
-    println!("  paint            {:>8.1} us/frame   (budget 400 us)", per / 1000.0);
-    println!("  buffer           {:>8.1} KiB", (w * h * 4) as f64 / 1024.0);
-    println!("  present copy     {:>8.1} KiB/frame full-window", (w * h * 4) as f64 / 1024.0);
-    println!("  solve+paint/sec  {:>8.1} ms of a 1000 ms budget at 60 Hz", per * 60.0 / 1e6);
+    println!(
+        "  paint            {:>8.1} us/frame   (budget 400 us)",
+        per / 1000.0
+    );
+    println!(
+        "  buffer           {:>8.1} KiB",
+        (w * h * 4) as f64 / 1024.0
+    );
+    println!(
+        "  present copy     {:>8.1} KiB/frame full-window",
+        (w * h * 4) as f64 / 1024.0
+    );
+    println!(
+        "  solve+paint/sec  {:>8.1} ms of a 1000 ms budget at 60 Hz",
+        per * 60.0 / 1e6
+    );
 }
 
 pub fn diag(settings: &Settings) -> String {
@@ -686,15 +745,44 @@ pub fn diag(settings: &Settings) -> String {
     let frame = m.relayout(&[m0], 0);
     let mut out = String::new();
     out.push_str(&format!("hanglock {}\n", env!("CARGO_PKG_VERSION")));
-    out.push_str(&format!("  settings file   {}\n", crate::store::path().display()));
-    out.push_str(&format!("  frame (device)  {:.0},{:.0} {:.0}x{:.0}\n", frame.x0, frame.y0, frame.w(), frame.h()));
-    out.push_str(&format!("  anchor (device) {:.1},{:.1}\n", m.rope.anchor.x, m.rope.anchor.y));
-    out.push_str(&format!("  hang            {:.0} logical px, {:.1} device px, {} links\n", m.settings.overlay.hang, m.rope.hang, m.rope.cfg.segments));
-    out.push_str(&format!("  posture         {}\n", m.settings.face.posture.as_str()));
-    out.push_str(&format!("  click through   {}\n", m.settings.overlay.click_through.as_str()));
-    out.push_str(&format!("  state           {:?}, sleeping={}\n", m.state, m.rope.sleeping));
+    out.push_str(&format!(
+        "  settings file   {}\n",
+        crate::store::path().display()
+    ));
+    out.push_str(&format!(
+        "  frame (device)  {:.0},{:.0} {:.0}x{:.0}\n",
+        frame.x0,
+        frame.y0,
+        frame.w(),
+        frame.h()
+    ));
+    out.push_str(&format!(
+        "  anchor (device) {:.1},{:.1}\n",
+        m.rope.anchor.x, m.rope.anchor.y
+    ));
+    out.push_str(&format!(
+        "  hang            {:.0} logical px, {:.1} device px, {} links\n",
+        m.settings.overlay.hang, m.rope.hang, m.rope.cfg.segments
+    ));
+    out.push_str(&format!(
+        "  posture         {}\n",
+        m.settings.face.posture.as_str()
+    ));
+    out.push_str(&format!(
+        "  click through   {}\n",
+        m.settings.overlay.click_through.as_str()
+    ));
+    out.push_str(&format!(
+        "  state           {:?}, sleeping={}\n",
+        m.state, m.rope.sleeping
+    ));
     m.paint();
-    out.push_str(&format!("  canvas          {}x{}, present_rect {:?}", m.canvas.size().0, m.canvas.size().1, m.canvas.present_rect().is_some()));
+    out.push_str(&format!(
+        "  canvas          {}x{}, present_rect {:?}",
+        m.canvas.size().0,
+        m.canvas.size().1,
+        m.canvas.present_rect().is_some()
+    ));
     out
 }
 
@@ -722,7 +810,11 @@ mod tests {
     fn the_frame_fits_the_display_and_the_anchor_is_inside_it() {
         let m = model();
         let f = m.layout_frame;
-        assert!(f.x0 >= -0.01 && f.x1 <= 1920.0 + 0.01, "frame {:?} escaped the monitor", f);
+        assert!(
+            f.x0 >= -0.01 && f.x1 <= 1920.0 + 0.01,
+            "frame {:?} escaped the monitor",
+            f
+        );
         assert!(f.y0 >= -0.01);
         assert!(m.rope.anchor.x > 0.0 && m.rope.anchor.x < f.w());
         assert!(m.rope.anchor.y > 0.0 && m.rope.anchor.y < f.h());
@@ -738,7 +830,10 @@ mod tests {
         let c = m.rope.card_centre();
         m.rope.begin_drag(c, 10.0);
         for i in 0..12 {
-            m.rope.move_drag(Vec2::new(m.rope.anchor.x + 120.0, m.rope.anchor.y + 140.0 + i as f64), Vec2::new(600.0, 0.0));
+            m.rope.move_drag(
+                Vec2::new(m.rope.anchor.x + 120.0, m.rope.anchor.y + 140.0 + i as f64),
+                Vec2::new(600.0, 0.0),
+            );
             m.on_frame(1.0 / 60.0);
         }
         m.rope.end_drag();
@@ -754,8 +849,14 @@ mod tests {
                 break;
             }
         }
-        assert!(m.wants_ticks() == false, "the app never stopped asking for frames");
-        assert!(actions_with_motion < 400, "too many presented frames while settling: {actions_with_motion}");
+        assert!(
+            m.wants_ticks() == false,
+            "the app never stopped asking for frames"
+        );
+        assert!(
+            actions_with_motion < 400,
+            "too many presented frames while settling: {actions_with_motion}"
+        );
         assert!(m.state == State::Settled);
     }
 
@@ -770,7 +871,10 @@ mod tests {
             a.iter().all(|x| matches!(x, Action::None)),
             "an unchanged face must not present: {a:?}"
         );
-        assert!(b.iter().all(|x| matches!(x, Action::None)) || b.iter().any(|x| matches!(x, Action::PresentRect(_))));
+        assert!(
+            b.iter().all(|x| matches!(x, Action::None))
+                || b.iter().any(|x| matches!(x, Action::PresentRect(_)))
+        );
     }
 
     #[test]
@@ -788,7 +892,11 @@ mod tests {
         let digits_area = (rect.x1 - rect.x0) * (rect.y1 - rect.y0);
         let whole = f.w() * f.h();
         assert!(digits_area > 0.0);
-        assert!(digits_area < whole * 0.35, "presenting {:.0}% of the window for a digit change", digits_area / whole * 100.0);
+        assert!(
+            digits_area < whole * 0.35,
+            "presenting {:.0}% of the window for a digit change",
+            digits_area / whole * 100.0
+        );
     }
 
     #[test]
@@ -796,16 +904,25 @@ mod tests {
         let mut m = model();
         let before = m.settings.overlay.hang;
         let a = m.on_input(Input::Wheel { delta: 1 });
-        assert!(a.contains(&Action::Relayout), "a longer hang needs a taller window: {a:?}");
+        assert!(
+            a.contains(&Action::Relayout),
+            "a longer hang needs a taller window: {a:?}"
+        );
         assert!(m.settings.overlay.hang > before);
         let top = m.settings.overlay.hang;
         m.on_input(Input::Wheel { delta: 1 });
         m.on_input(Input::Wheel { delta: 1 });
-        assert_eq!(m.settings.overlay.hang, top, "the longest step must stick at the end of the range");
+        assert_eq!(
+            m.settings.overlay.hang, top,
+            "the longest step must stick at the end of the range"
+        );
         for _ in 0..10 {
             m.on_input(Input::Wheel { delta: -1 });
         }
-        assert!(m.settings.overlay.hang < before, "the wheel must be able to come back");
+        assert!(
+            m.settings.overlay.hang < before,
+            "the wheel must be able to come back"
+        );
     }
 
     #[test]
@@ -816,7 +933,10 @@ mod tests {
         m.settings.overlay.click_through = ClickThrough::Always;
         assert!(!m.hit_regions().interactive);
         let p = m.rope.card_centre();
-        assert!(!m.hit_regions().contains(p), "with click_through=always nothing may be clickable");
+        assert!(
+            !m.hit_regions().contains(p),
+            "with click_through=always nothing may be clickable"
+        );
     }
 
     #[test]
@@ -824,9 +944,15 @@ mod tests {
         let m = model();
         let r = m.hit_regions();
         let centre = r.plate_centre;
-        assert!(r.on_plate(centre), "the plate's own centre must be on the plate");
+        assert!(
+            r.on_plate(centre),
+            "the plate's own centre must be on the plate"
+        );
         let a = r.anchor;
-        assert!(r.on_ring(a), "the ring must be grabbable: it is how the clock is moved");
+        assert!(
+            r.on_ring(a),
+            "the ring must be grabbable: it is how the clock is moved"
+        );
         assert!(!r.on_plate(a), "the ring must not count as the plate");
     }
 
@@ -843,7 +969,10 @@ mod tests {
             Command::ResetPosition,
         ] {
             let a = m.on_command(cmd);
-            assert!(a.contains(&Action::Save), "{cmd:?} changed settings without persisting");
+            assert!(
+                a.contains(&Action::Save),
+                "{cmd:?} changed settings without persisting"
+            );
         }
     }
 
@@ -870,21 +999,46 @@ mod tests {
         let a = m.on_system(hanglock_platform::SystemEvent::Resumed);
         assert!(a.contains(&Action::Relayout));
         let after = m.rope.card_centre();
-        assert_eq!(before, after, "a resume must not move the object; the deficit is dropped");
+        assert_eq!(
+            before, after,
+            "a resume must not move the object; the deficit is dropped"
+        );
     }
 
     #[test]
     fn moving_the_ring_moves_the_clock_and_persists_a_ratio() {
         let mut m = model();
         let a = m.rope.anchor;
-        m.on_input(Input::Press { at: Vec2::new(a.x, a.y) });
-        assert!(m.is_repositioning(), "pressing the ring must start a reposition");
-        let moved = m.on_input(Input::Move { at: Vec2::new(a.x + 300.0, a.y), vel: Vec2::ZERO, dt: 1.0 / 60.0 });
-        assert!(moved.iter().any(|x| matches!(x, Action::Move(_))), "the window must follow the ring");
+        m.on_input(Input::Press {
+            at: Vec2::new(a.x, a.y),
+        });
+        assert!(
+            m.is_repositioning(),
+            "pressing the ring must start a reposition"
+        );
+        let moved = m.on_input(Input::Move {
+            at: Vec2::new(a.x + 300.0, a.y),
+            vel: Vec2::ZERO,
+            dt: 1.0 / 60.0,
+        });
+        assert!(
+            moved.iter().any(|x| matches!(x, Action::Move(_))),
+            "the window must follow the ring"
+        );
         let ratio = m.settings.overlay.anchor_ratio;
-        assert!(ratio > 0.5, "dragging right must increase the ratio, got {ratio}");
-        m.on_input(Input::Release { at: Vec2::new(a.x + 300.0, a.y), vel: Vec2::ZERO, dt: 1.0 / 60.0 });
-        assert!((m.settings.overlay.anchor_ratio - ratio).abs() < 1e-9, "the ratio was committed at release time");
+        assert!(
+            ratio > 0.5,
+            "dragging right must increase the ratio, got {ratio}"
+        );
+        m.on_input(Input::Release {
+            at: Vec2::new(a.x + 300.0, a.y),
+            vel: Vec2::ZERO,
+            dt: 1.0 / 60.0,
+        });
+        assert!(
+            (m.settings.overlay.anchor_ratio - ratio).abs() < 1e-9,
+            "the ratio was committed at release time"
+        );
     }
 
     #[test]
@@ -914,7 +1068,13 @@ mod geometry {
         let card = CardSpec::default();
         let mut settings = Settings::default();
         settings.overlay.scale = 1.0;
-        let box_logical = hanglock_core::placement::swept_box(&cfg, &card, settings.overlay.hang, settings.overlay.margin, 1.0);
+        let box_logical = hanglock_core::placement::swept_box(
+            &cfg,
+            &card,
+            settings.overlay.hang,
+            settings.overlay.margin,
+            1.0,
+        );
         let mon = Monitor {
             index: 0,
             bounds: Rect::new(0.0, 0.0, 1920.0 / scale, 1080.0 / scale),
@@ -924,7 +1084,16 @@ mod geometry {
             taskbar_auto_hidden: false,
             primary: true,
         };
-        let p = place(&mon, &cfg, &card, settings.overlay.hang, 1.0, 0.5, settings.overlay.margin, true);
+        let p = place(
+            &mon,
+            &cfg,
+            &card,
+            settings.overlay.hang,
+            1.0,
+            0.5,
+            settings.overlay.margin,
+            true,
+        );
         (box_logical.w(), box_logical.h(), p.frame.w(), p.frame.h())
     }
 
@@ -932,7 +1101,10 @@ mod geometry {
     fn window_and_present_sizes_are_as_documented() {
         for scale in [1.0, 1.25, 1.5, 2.0] {
             let (lw, lh, dw, dh) = sizes(scale);
-            assert!((dw - lw * scale).abs() < 1.0, "device width is not logical x scale at {scale}");
+            assert!(
+                (dw - lw * scale).abs() < 1.0,
+                "device width is not logical x scale at {scale}"
+            );
             // The full-window present is the swinging cost; the digits' box is the settled cost.
             let full_bytes = dw * dh * 4.0;
             let digits_bytes = 260.0 * scale * 60.0 * scale * 4.0;
@@ -940,8 +1112,14 @@ mod geometry {
                 "scale {scale:>4}: logical {:.0}x{:.0}  device {:.0}x{:.0}  full present {:.0} KiB  settled present {:.0} KiB",
                 lw, lh, dw, dh, full_bytes / 1024.0, digits_bytes / 1024.0
             );
-            assert!(full_bytes < 3.0 * 1024.0 * 1024.0, "full present exceeds 3 MiB at {scale}: too big a window");
-            assert!(digits_bytes * 30.0 < full_bytes, "the 1 Hz present must be far cheaper than a 60 Hz full present");
+            assert!(
+                full_bytes < 3.0 * 1024.0 * 1024.0,
+                "full present exceeds 3 MiB at {scale}: too big a window"
+            );
+            assert!(
+                digits_bytes * 30.0 < full_bytes,
+                "the 1 Hz present must be far cheaper than a 60 Hz full present"
+            );
         }
     }
 }

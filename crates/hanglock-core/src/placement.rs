@@ -176,13 +176,16 @@ pub fn place(
 /// wrong answer is a clock that never appears.
 #[must_use]
 pub fn pick_monitor<'a>(mons: &[&'a Monitor], wanted: u32, primary: u32) -> &'a Monitor {
-    mons.iter().copied().find(|m| m.index == wanted).unwrap_or_else(|| {
-        mons.iter()
-            .find(|m| m.index == primary)
-            .or(mons.first())
-            .copied()
-            .unwrap_or(&DEFAULT_MONITOR)
-    })
+    mons.iter()
+        .copied()
+        .find(|m| m.index == wanted)
+        .unwrap_or_else(|| {
+            mons.iter()
+                .find(|m| m.index == primary)
+                .or(mons.first())
+                .copied()
+                .unwrap_or(&DEFAULT_MONITOR)
+        })
 }
 
 /// Stand-in used when enumeration somehow yields nothing (no desktop, session 0). Zero-size is

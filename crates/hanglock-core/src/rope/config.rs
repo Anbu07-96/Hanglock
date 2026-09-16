@@ -97,10 +97,26 @@ pub struct Posture {
 }
 
 impl Posture {
-    pub const NATURAL: Posture = Posture { stiffness: 120.0, damping: 9.0, max_angle: 0.4538 };
-    pub const PLATE: Posture = Posture { stiffness: 420.0, damping: 24.0, max_angle: 0.1571 };
-    pub const MOUNTED: Posture = Posture { stiffness: 1400.0, damping: 46.0, max_angle: 0.0436 };
-    pub const LOCKED: Posture = Posture { stiffness: 4000.0, damping: 90.0, max_angle: 0.0 };
+    pub const NATURAL: Posture = Posture {
+        stiffness: 120.0,
+        damping: 9.0,
+        max_angle: 0.4538,
+    };
+    pub const PLATE: Posture = Posture {
+        stiffness: 420.0,
+        damping: 24.0,
+        max_angle: 0.1571,
+    };
+    pub const MOUNTED: Posture = Posture {
+        stiffness: 1400.0,
+        damping: 46.0,
+        max_angle: 0.0436,
+    };
+    pub const LOCKED: Posture = Posture {
+        stiffness: 4000.0,
+        damping: 90.0,
+        max_angle: 0.0,
+    };
 
     #[must_use]
     pub fn from_id(id: &str) -> Self {
@@ -145,7 +161,13 @@ impl Default for RopeConfig {
 
 impl Default for CardSpec {
     fn default() -> Self {
-        Self { width: 252.0, height: 96.0, bracket: 9.0, corner: 17.0, hang: 150.0 }
+        Self {
+            width: 252.0,
+            height: 96.0,
+            bracket: 9.0,
+            corner: 17.0,
+            hang: 150.0,
+        }
     }
 }
 

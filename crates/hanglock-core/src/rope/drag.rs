@@ -21,12 +21,18 @@ impl Rope {
     /// since it is the same one the click-through gate and the hover cursor use.
     pub fn begin_drag(&mut self, at: Vec2, pad: f64) -> bool {
         let centre = self.card_centre();
-        let hit = self.att.contains(centre, &self.card, self.scale, at, pad * self.scale);
+        let hit = self
+            .att
+            .contains(centre, &self.card, self.scale, at, pad * self.scale);
         if !hit || self.nodes.len() < 2 {
             return false;
         }
         let last = self.nodes.len() - 1;
-        self.drag = Drag { held: Some(last), target: self.reachable(at), vel: Vec2::ZERO };
+        self.drag = Drag {
+            held: Some(last),
+            target: self.reachable(at),
+            vel: Vec2::ZERO,
+        };
         self.wake();
         true
     }
@@ -87,7 +93,8 @@ impl Rope {
     #[must_use]
     pub fn can_grab(&self, at: Vec2, pad: f64) -> bool {
         let centre = self.card_centre();
-        self.att.contains(centre, &self.card, self.scale, at, pad * self.scale)
+        self.att
+            .contains(centre, &self.card, self.scale, at, pad * self.scale)
     }
 
     /// The plate's lean at the tail node, exposed for the debug read-out.

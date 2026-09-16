@@ -118,7 +118,12 @@ pub fn format(c: &Civil, o: &FaceOptions) -> FaceText {
         buf[n] = b'0' + (c.second % 10) as u8;
         n += 1;
     }
-    FaceText { main: buf, main_len: n as u8, suffix, suffix_len }
+    FaceText {
+        main: buf,
+        main_len: n as u8,
+        suffix,
+        suffix_len,
+    }
 }
 
 #[cfg(test)]
@@ -126,7 +131,14 @@ mod tests {
     use super::*;
 
     fn at(y: i64, mo: u32, d: u32, h: u32, mi: u32, s: u32) -> Civil {
-        Civil { year: y, month: mo, day: d, hour: h, minute: mi, second: s }
+        Civil {
+            year: y,
+            month: mo,
+            day: d,
+            hour: h,
+            minute: mi,
+            second: s,
+        }
     }
 
     #[test]
@@ -160,7 +172,11 @@ mod tests {
 
     #[test]
     fn twelve_hour_boundaries() {
-        let o = FaceOptions { hour12: true, seconds: false, meridiem: true };
+        let o = FaceOptions {
+            hour12: true,
+            seconds: false,
+            meridiem: true,
+        };
         assert_eq!(format(&at(2026, 1, 1, 0, 5, 0), &o).as_str(), "12:05");
         assert_eq!(format(&at(2026, 1, 1, 0, 5, 0), &o).suffix_str(), "AM");
         assert_eq!(format(&at(2026, 1, 1, 12, 0, 0), &o).as_str(), "12:00");
@@ -171,17 +187,39 @@ mod tests {
 
     #[test]
     fn no_leading_zero_in_twelve_hour_and_always_in_twenty_four() {
-        let o12 = FaceOptions { hour12: true, seconds: false, meridiem: false };
+        let o12 = FaceOptions {
+            hour12: true,
+            seconds: false,
+            meridiem: false,
+        };
         assert_eq!(format(&at(2026, 1, 1, 9, 5, 0), &o12).as_str(), "9:05");
-        let o24 = FaceOptions { hour12: false, seconds: false, meridiem: false };
+        let o24 = FaceOptions {
+            hour12: false,
+            seconds: false,
+            meridiem: false,
+        };
         assert_eq!(format(&at(2026, 1, 1, 9, 5, 0), &o24).as_str(), "09:05");
     }
 
     #[test]
     fn seconds_extend_the_run_by_exactly_three_glyphs() {
         let c = at(2026, 1, 1, 10, 42, 7);
-        let a = format(&c, &FaceOptions { hour12: true, seconds: false, meridiem: true });
-        let b = format(&c, &FaceOptions { hour12: true, seconds: true, meridiem: true });
+        let a = format(
+            &c,
+            &FaceOptions {
+                hour12: true,
+                seconds: false,
+                meridiem: true,
+            },
+        );
+        let b = format(
+            &c,
+            &FaceOptions {
+                hour12: true,
+                seconds: true,
+                meridiem: true,
+            },
+        );
         assert_eq!(b.glyph_count() - a.glyph_count(), 3);
         assert_eq!(b.as_str(), "10:42:07");
     }

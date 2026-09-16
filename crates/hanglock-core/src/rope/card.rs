@@ -23,7 +23,12 @@ pub struct Card {
 
 impl Card {
     pub fn new(posture: Posture) -> Self {
-        Self { theta: 0.0, omega: 0.0, posture, gain: 0.55 }
+        Self {
+            theta: 0.0,
+            omega: 0.0,
+            posture,
+            gain: 0.55,
+        }
     }
 
     /// The cord's lean at the tail: the direction of the last link, measured from straight down.
@@ -70,7 +75,10 @@ impl Card {
         ];
         let mut out = [Vec2::ZERO; 4];
         for (o, l) in out.iter_mut().zip(local) {
-            *o = Vec2::new(centre.x + l.x * cs - l.y * sn, centre.y + l.x * sn + l.y * cs);
+            *o = Vec2::new(
+                centre.x + l.x * cs - l.y * sn,
+                centre.y + l.x * sn + l.y * cs,
+            );
         }
         out
     }

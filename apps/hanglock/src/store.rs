@@ -53,17 +53,26 @@ pub fn load() -> Result<Settings, String> {
         // Empty file: treat as first run rather than corrupt.
         return Ok(settings);
     }
-    if text.lines().any(|l| !l.trim().is_empty() && !l.trim().starts_with('#') && !l.contains('=')) {
+    if text
+        .lines()
+        .any(|l| !l.trim().is_empty() && !l.trim().starts_with('#') && !l.contains('='))
+    {
         // Something structurally unreadable. Preserve it, use defaults, and say so once.
         let backup = quarantine(&p);
-        eprintln!("hanglock: settings file unreadable; kept at {}", backup.display());
+        eprintln!(
+            "hanglock: settings file unreadable; kept at {}",
+            backup.display()
+        );
         return Ok(Settings::default());
     }
     Ok(settings)
 }
 
 fn quarantine(p: &std::path::Path) -> PathBuf {
-    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
     let name = format!("settings.toml.corrupt-{stamp}");
     let target = p.with_file_name(name);
     let _ = std::fs::rename(p, &target);
@@ -92,7 +101,11 @@ pub fn save(s: &Settings) -> Result<(), String> {
     Err(last)
 }
 
-fn write_and_replace(tmp: &std::path::Path, p: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+fn write_and_replace(
+    tmp: &std::path::Path,
+    p: &std::path::Path,
+    bytes: &[u8],
+) -> Result<(), String> {
     std::fs::write(tmp, bytes).map_err(|e| format!("write: {e}"))?;
     #[cfg(windows)]
     {
@@ -137,6 +150,13 @@ fn replace_file_win(target: &std::path::Path, source: &std::path::Path) -> bool 
     };
     let (t, s) = (w(target), w(source));
     unsafe {
-        ReplaceFileW(t.as_ptr(), s.as_ptr(), std::ptr::null(), REPLACEFILE_WRITE_CHANGES, std::ptr::null(), std::ptr::null()) != 0
+        ReplaceFileW(
+            t.as_ptr(),
+            s.as_ptr(),
+            std::ptr::null(),
+            REPLACEFILE_WRITE_CHANGES,
+            std::ptr::null(),
+            std::ptr::null(),
+        ) != 0
     }
 }

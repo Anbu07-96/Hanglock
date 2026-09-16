@@ -84,8 +84,16 @@ impl Default for Settings {
                 respect_taskbar: true,
                 margin: 16.0,
             },
-            face: Face { hour12: true, seconds: false, meridiem: true, posture: PostureKind::Plate },
-            general: General { launch_at_login: false, fps_cap: 60 },
+            face: Face {
+                hour12: true,
+                seconds: false,
+                meridiem: true,
+                posture: PostureKind::Plate,
+            },
+            general: General {
+                launch_at_login: false,
+                fps_cap: 60,
+            },
         }
     }
 }
@@ -101,12 +109,17 @@ impl Settings {
         // NaN in the position of the plate, and a NaN coordinate propagates through the solver and the
         // painter into a window that never redraws. Found while writing the tests for this function,
         // which is the argument for having them.
-        o.anchor_ratio = finite(o.anchor_ratio, d.overlay.anchor_ratio).clamp(limits::ANCHOR_RATIO.0, limits::ANCHOR_RATIO.1);
+        o.anchor_ratio = finite(o.anchor_ratio, d.overlay.anchor_ratio)
+            .clamp(limits::ANCHOR_RATIO.0, limits::ANCHOR_RATIO.1);
         o.hang = finite(o.hang, d.overlay.hang).clamp(limits::HANG.0, limits::HANG.1);
         o.scale = finite(o.scale, d.overlay.scale).clamp(limits::SCALE.0, limits::SCALE.1);
-        o.opacity = finite(o.opacity, d.overlay.opacity).clamp(limits::OPACITY.0, limits::OPACITY.1);
+        o.opacity =
+            finite(o.opacity, d.overlay.opacity).clamp(limits::OPACITY.0, limits::OPACITY.1);
         o.margin = finite(o.margin, d.overlay.margin).clamp(limits::MARGIN.0, limits::MARGIN.1);
-        self.general.fps_cap = self.general.fps_cap.clamp(limits::FPS_CAP.0, limits::FPS_CAP.1);
+        self.general.fps_cap = self
+            .general
+            .fps_cap
+            .clamp(limits::FPS_CAP.0, limits::FPS_CAP.1);
     }
 
     /// Write the document. Keys are emitted in a fixed order so two runs on the same machine

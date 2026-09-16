@@ -19,11 +19,19 @@ pub struct Node {
 
 impl Node {
     /// A pinned node: the anchor.
-    pub const PINNED: Node = Node { pos: Vec2::ZERO, prev: Vec2::ZERO, inv_mass: 0.0 };
+    pub const PINNED: Node = Node {
+        pos: Vec2::ZERO,
+        prev: Vec2::ZERO,
+        inv_mass: 0.0,
+    };
 
     #[must_use]
     pub fn free(pos: Vec2, mass: f64) -> Self {
-        Self { pos, prev: pos, inv_mass: 1.0 / mass.max(1e-6) }
+        Self {
+            pos,
+            prev: pos,
+            inv_mass: 1.0 / mass.max(1e-6),
+        }
     }
 
     #[must_use]

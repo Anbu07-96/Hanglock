@@ -56,7 +56,13 @@ pub struct Rope {
 
 impl Rope {
     #[must_use]
-    pub fn new(cfg: RopeConfig, card: CardSpec, posture: Posture, anchor: Vec2, scale: f64) -> Self {
+    pub fn new(
+        cfg: RopeConfig,
+        card: CardSpec,
+        posture: Posture,
+        anchor: Vec2,
+        scale: f64,
+    ) -> Self {
         let mut s = Self {
             cfg,
             card,
