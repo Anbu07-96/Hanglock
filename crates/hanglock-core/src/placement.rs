@@ -180,7 +180,7 @@ pub fn pick_monitor<'a>(mons: &[&'a Monitor], wanted: u32, primary: u32) -> &'a 
         mons.iter()
             .copied()
             .find(|m| m.index == primary)
-            .or(mons.first())
+            .or(mons.first().copied())
             .copied()
             .unwrap_or(&DEFAULT_MONITOR)
     })

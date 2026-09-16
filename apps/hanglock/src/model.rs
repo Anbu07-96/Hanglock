@@ -10,7 +10,7 @@
 //! is presented that a person cannot see.** A settled clock steps no physics and copies only the
 //! digits' rectangle, once a second, because that is the only thing that changed.
 
-use hanglock_core::clock::format::{FaceOptions, FaceText, Civil};
+use hanglock_core::clock::format::{Civil, FaceOptions, FaceText};
 use hanglock_core::ids::{ClickThrough, PostureKind};
 use hanglock_core::placement::{place, Monitor, Rect};
 use hanglock_core::rope::config::{CardSpec, Posture};
@@ -108,7 +108,8 @@ impl HitRegions {
     pub fn on_plate(&self, p: Vec2) -> bool {
         let (cs, sn) = (self.theta.cos(), self.theta.sin());
         let (dx, dy) = (p.x - self.plate_centre.x, p.y - self.plate_centre.y);
-        ((dx * cs + dy * sn).abs() <= self.plate_hw) && ((-dx * sn + dy * cs).abs() <= self.plate_hh)
+        ((dx * cs + dy * sn).abs() <= self.plate_hw)
+            && ((-dx * sn + dy * cs).abs() <= self.plate_hh)
     }
 }
 

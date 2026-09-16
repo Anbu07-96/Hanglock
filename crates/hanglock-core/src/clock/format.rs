@@ -32,7 +32,7 @@ pub fn civil_from_unix_ms(ms: i64) -> Civil {
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     Civil {
         year: y + i64::from(if m <= 2 { 1 } else { 0 }),
-        month: m,
+        month: m as u32,
         day: d as u32,
         hour: (sod / 3600) as u32,
         minute: (sod / 60 % 60) as u32,

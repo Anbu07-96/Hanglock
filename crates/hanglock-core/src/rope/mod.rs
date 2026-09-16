@@ -215,11 +215,11 @@ impl Rope {
         taken > 0
     }
 
-    fn advance(&mut self, h: f64) {
+    fn advance(&mut self, dt: f64) {
         let cfg = self.cfg;
-        let g = cfg.gravity * self.scale;
-        let lim = cfg.max_speed * h;
-        let dv = cfg.friction_acc * self.scale * h * h;
+        let gravity = cfg.gravity * self.scale;
+        let lim = cfg.max_speed * dt;
+        let dv = cfg.friction_acc * self.scale * dt * dt;
 
         // 1. pin
         self.nodes[0].pos = self.anchor;
@@ -233,24 +233,24 @@ impl Rope {
             if self.nodes[i].inv_mass <= 0.0 {
                 continue;
             }
-            let p = self.nodes[i].pos;
-            let q = self.nodes[i].prev;
-            let b = if self.braking { cfg.brake_step } else { 1.0 };
-            let mut v = p.sub(q).scale(cfg.damping * b);
-            let m = p.sub(q).len();
-            if m > 1e-12 {
-                let k = (m - dv).max(0.0) / m;
-                v = v.scale(k);
+            let cur = self.nodes[i].pos;
+            let prev = self.nodes[i].prev;
+            let brake = if self.braking { cfg.brake_step } else { 1.0 };
+            let mut vel = cur.sub(prev).scale(cfg.damping * brake);
+            let moved = cur.sub(prev).len();
+            if moved > 1e-12 {
+                let shrink = (moved - dv).max(0.0) / moved;
+                vel = vel.scale(shrink);
             }
-            if m > lim {
-                v = v.scale(lim / m);
+            if moved > lim {
+                vel = vel.scale(lim / moved);
             }
-            self.nodes[i].prev = p;
-            self.nodes[i].pos = Vec2::new(p.x + v.x, p.y + v.y + g * h * h);
+            self.nodes[i].prev = cur;
+            self.nodes[i].pos = Vec2::new(cur.x + vel.x, cur.y + vel.y + gravity * dt * dt);
         }
 
         // 3. drive the held node (see drag.rs)
-        drag::drive(self, h, lim);
+        drag::drive(self, dt, lim);
 
         // 4/5. satisfy the cord, then guarantee the ceiling
         let held = self.drag.held;
@@ -262,7 +262,7 @@ impl Rope {
         if self.braking {
             let ax = self.anchor.x;
             constraints::relevel(&mut self.nodes, ax, cfg.relevel);
-            self.att.theta *= 1.0 - 8.0 * h;
+            self.att.theta *= 1.0 - 8.0 * dt;
         }
 
         // 7/8. sector limit, then the plate's own attitude
@@ -272,7 +272,7 @@ impl Rope {
             (self.nodes[n - 1].pos, self.nodes[n - 2].pos)
         };
         let lean = Card::lean(tail, before);
-        self.att.step(lean, cfg.mass_card, h);
+        self.att.step(lean, cfg.mass_card, dt);
     }
 
     /// Stillness, measured on the drawn silhouette across a window of fixed steps.

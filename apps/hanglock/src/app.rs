@@ -23,7 +23,7 @@ use crate::store;
 use hanglock_core::ids::ClickThrough;
 use hanglock_core::settings::Settings;
 use hanglock_platform::{Command, Input, SystemEvent};
-use hanglock_win::window::{AppHook, Host, HitShape, OverlayConfig};
+use hanglock_win::window::{AppHook, HitShape, Host, OverlayConfig};
 use std::process::ExitCode;
 
 pub struct Adapter {
@@ -116,7 +116,11 @@ impl Adapter {
             self.pushed_ignore = Some(ignore);
         }
         host.show(self.model.state != State::Hidden);
-        host.set_rate(if self.model.wants_ticks() { self.model.preferred_rate() } else { 0 });
+        host.set_rate(if self.model.wants_ticks() {
+            self.model.preferred_rate()
+        } else {
+            0
+        });
         host.sync_tick_timer();
     }
 }
@@ -124,7 +128,11 @@ impl Adapter {
 impl AppHook for Adapter {
     fn on_ready(&mut self, host: &mut Host) {
         let monitors = host.monitors();
-        self.primary = monitors.iter().find(|m| m.primary).map(|m| m.index).unwrap_or(0);
+        self.primary = monitors
+            .iter()
+            .find(|m| m.primary)
+            .map(|m| m.index)
+            .unwrap_or(0);
         let frame = self.model.relayout(&monitors, self.primary);
         host.set_frame(frame);
         self.model.paint();
@@ -164,9 +172,16 @@ impl AppHook for Adapter {
     fn on_system(&mut self, host: &mut Host, event: SystemEvent) {
         let actions = self.model.on_system(event);
         self.apply(host, actions);
-        if matches!(event, SystemEvent::DisplaysChanged | SystemEvent::DpiChanged) {
+        if matches!(
+            event,
+            SystemEvent::DisplaysChanged | SystemEvent::DpiChanged
+        ) {
             let (visible, ..) = self.model.menu_state();
-            host.set_tooltip(if visible { "Hanglock — right-click for options" } else { "Hanglock — clock hidden" });
+            host.set_tooltip(if visible {
+                "Hanglock — right-click for options"
+            } else {
+                "Hanglock — clock hidden"
+            });
         }
     }
 
@@ -203,6 +218,12 @@ impl AppHook for Adapter {
 
     fn menu_state(&self) -> hanglock_win::tray::MenuState {
         let (visible, topmost, seconds, hour12, posture) = self.model.menu_state();
-        hanglock_win::tray::MenuState { visible, topmost, seconds, hour12, posture }
+        hanglock_win::tray::MenuState {
+            visible,
+            topmost,
+            seconds,
+            hour12,
+            posture,
+        }
     }
 }

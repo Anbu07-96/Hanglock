@@ -29,7 +29,9 @@ fn main() -> ExitCode {
     let settings = match store::load() {
         Ok(s) => s,
         Err(what) => {
-            eprintln!("hanglock: settings unreadable ({what}); using defaults, original kept alongside");
+            eprintln!(
+                "hanglock: settings unreadable ({what}); using defaults, original kept alongside"
+            );
             Settings::default()
         }
     };

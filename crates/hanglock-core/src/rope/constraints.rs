@@ -41,22 +41,22 @@ pub fn relax(nodes: &mut [Node], rest_len: f64, cfg: &RopeConfig, held: Option<u
             if total <= 0.0 {
                 continue;
             }
-            let a = nodes[i].pos;
-            let b = nodes[i + 1].pos;
-            let d = b.sub(a);
-            let dist = d.len();
+            let pa = nodes[i].pos;
+            let pb = nodes[i + 1].pos;
+            let delta = pb.sub(pa);
+            let dist = delta.len();
             if dist <= f64::EPSILON {
                 continue;
             }
-            let c = (dist - rest_len) / dist / total;
-            let corr = d.scale(c);
+            let ratio = (dist - rest_len) / dist / total;
+            let corr = delta.scale(ratio);
             let ca = corr.scale(ia);
             let cb = corr.scale(ib);
-            nodes[i].pos = a.add(ca);
-            nodes[i + 1].pos = b.sub(cb);
-            let m = ca.len().max(cb.len());
-            if m > worst {
-                worst = m;
+            nodes[i].pos = pa.add(ca);
+            nodes[i + 1].pos = pb.sub(cb);
+            let moved = ca.len().max(cb.len());
+            if moved > worst {
+                worst = moved;
             }
         }
         largest = worst;
