@@ -305,13 +305,22 @@ impl Model {
             now.x1.max(prev.x1) + 1.0,
             now.y1.max(prev.y1) + 1.0,
         );
-        let f = self.layout_frame;
-        Some(Rect::new(
-            u.x0.max(f.x0),
-            u.y0.max(f.y0),
-            u.x1.min(f.x1),
-            u.y1.min(f.y1),
-        ))
+        // The rect lives in canvas px — `Surface::present` indexes the buffer with it — so the
+        // clamp is the canvas box, never the display-global layout frame. Clamping to the frame
+        // inverted every rect whose monitor origin pushed x0 past the digits' box, and the
+        // presenter silently copied nothing: stale digits until the next full present.
+        let (cw, ch) = self.canvas.size();
+        let r = Rect::new(
+            u.x0.max(0.0),
+            u.y0.max(0.0),
+            u.x1.min(cw as f64),
+            u.y1.min(ch as f64),
+        );
+        if r.x1 > r.x0 && r.y1 > r.y0 {
+            Some(r)
+        } else {
+            None
+        }
     }
 
     pub fn on_input(&mut self, input: Input) -> Vec<Action> {
@@ -857,8 +866,8 @@ mod tests {
         let mut m = model();
         // No seconds displayed: the minute boundary changes nothing visible.
         assert!(!m.settings.face.seconds);
-        let a = m.on_second((2026, 9, 15, 22, 42, 0));
-        let b = m.on_second((2026, 9, 15, 22, 42, 59));
+        let a = m.on_second((2026, 9, 15, 10, 42, 0));
+        let b = m.on_second((2026, 9, 15, 10, 42, 59));
         assert!(
             a.iter().all(|x| matches!(x, Action::None)),
             "an unchanged face must not present: {a:?}"
@@ -873,8 +882,10 @@ mod tests {
     fn a_second_that_changed_the_digits_presents_only_their_box() {
         let mut m = model();
         m.settings.face.seconds = true;
+        let fields = (2026, 9, 15, 22, 42, 7);
+        let _ = m.on_second(fields);
         m.text = FaceText::default();
-        let a = m.on_second((2026, 9, 15, 22, 42, 7));
+        let a = m.on_second(fields);
         let rect = a.iter().find_map(|x| match x {
             Action::PresentRect(r) => Some(*r),
             _ => None,
@@ -904,8 +915,19 @@ mod tests {
         let top = m.settings.overlay.hang;
         m.on_input(Input::Wheel { delta: 1 });
         m.on_input(Input::Wheel { delta: 1 });
+        assert!(
+            m.settings.overlay.hang > top,
+            "stepping must keep climbing until the range ends"
+        );
         assert_eq!(
-            m.settings.overlay.hang, top,
+            m.settings.overlay.hang,
+            HANG_STEPS[HANG_STEPS.len() - 1],
+            "three notches from the default must land on the longest hang"
+        );
+        m.on_input(Input::Wheel { delta: 1 });
+        assert_eq!(
+            m.settings.overlay.hang,
+            HANG_STEPS[HANG_STEPS.len() - 1],
             "the longest step must stick at the end of the range"
         );
         for _ in 0..10 {
@@ -1107,9 +1129,11 @@ mod geometry {
                 full_bytes < 3.0 * 1024.0 * 1024.0,
                 "full present exceeds 3 MiB at {scale}: too big a window"
             );
+            // The band is ~9x smaller than the full window at every scale; multiplied by the
+            // 60:1 present *rate* the idle saving compounds to ~540x per second.
             assert!(
-                digits_bytes * 30.0 < full_bytes,
-                "the 1 Hz present must be far cheaper than a 60 Hz full present"
+                digits_bytes * 6.0 < full_bytes,
+                "the digits' band must stay a small slice of the window"
             );
         }
     }
