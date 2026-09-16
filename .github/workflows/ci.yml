@@ -33,14 +33,25 @@ jobs:
       - name: Test
         run: tools/ci/run-and-annotate.sh cargo_test test.log -- cargo test --workspace
       - name: Golden trace is current
-        # Re-generate the reference trace and fail if the committed one has drifted from the model it
-        # is supposed to pin. Without this, `tests/golden/*.txt` silently becomes fiction.
+        # Two artefacts are checked in *and* generated, and both are checked here: the golden trace
+        # (which `tests/golden_trace.rs` pins the solver to) and the face data (which is the reviewed
+        # face, transcribed). Without this step a golden silently becomes fiction — the solver would
+        # then be locking itself to whatever it happens to do today.
+        #
+        # The comparison is `tools/ci/currency.py`, not `diff`: the committed Rust has been through
+        # `cargo fmt`, whose layout is not drift, while the trace was generated on another machine and
+        # stores 7 decimals, so a last-digit libm choice is not drift either. Both rules are far
+        # tighter than anything a real change can produce. Each half logs and annotates separately.
         run: |
-          python3 tools/model/gen_face.py > /tmp/face_data.rs
-          diff -u crates/hanglock-render/src/face_data.rs /tmp/face_data.rs > golden.diff 2>&1 || {
-            cat golden.diff
-            python3 tools/ci/emit.py face_data_drift golden.diff
+          python3 tools/ci/currency.py trace tests/golden/trace_drag_settle.txt tests/golden/trace_drag_settle.json -- python3 tools/model/hanglock_ref.py trace > golden.log 2>&1 || {
+            cat golden.log
+            python3 tools/ci/emit.py golden_currency golden.log
             exit 1; }
+          python3 tools/ci/currency.py source crates/hanglock-render/src/face_data.rs -- python3 tools/model/gen_face.py > face_data.log 2>&1 || {
+            cat face_data.log
+            python3 tools/ci/emit.py face_data_currency face_data.log
+            exit 1; }
+          cat golden.log face_data.log
       - name: Bench (informational)
         run: tools/ci/run-and-annotate.sh bench_300 bench.log -- cargo run --release -p hanglock -- --bench 300
       - name: Asset provenance
@@ -55,11 +66,19 @@ jobs:
 
   windows:
     name: Build + test (Windows ${{ matrix.arch }})
-    runs-on: windows-latest
+    # The host must match the target. `cargo test` runs the binaries it builds, and an x64 host
+    # refuses to execute an aarch64 image ("This version of %1 is not compatible...", os error 216),
+    # so cross-arch testing on one runner cannot work in either direction. GitHub's arm64 Windows
+    # runner is free for public repos, so aarch64 gets a native host and its suite actually runs.
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        arch: [x86_64-pc-windows-msvc, aarch64-pc-windows-msvc]
+        include:
+          - arch: x86_64-pc-windows-msvc
+            os: windows-latest
+          - arch: aarch64-pc-windows-msvc
+            os: windows-11-arm
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.77.2
@@ -92,15 +111,18 @@ jobs:
             exit 1
           }
       - name: "Smoke: the binary runs headless on Windows"
+        # Each mode is the one the docs claim works with no desktop, and each one's output is kept:
+        # a red smoke step has to say *why* in a channel the analysis environment can read, not just
+        # that it went red.
         shell: pwsh
         run: |
           $exe = "target/${{ matrix.arch }}/release/hanglock.exe"
-          & $exe --diag | Tee-Object -FilePath diag.txt
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-          & $exe --bench 200 | Tee-Object -FilePath bench.txt -Append
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-          & $exe --dump-scene scene.png
-          if (-not (Test-Path scene.png)) { "::error::--dump-scene produced nothing"; exit 1 }
+          & $exe --diag 2>&1 | Tee-Object -FilePath diag.txt
+          if ($LASTEXITCODE -ne 0) { python tools/ci/emit.py "smoke diag ${{ matrix.arch }}" diag.txt; exit 1 }
+          & $exe --bench 200 2>&1 | Tee-Object -FilePath bench.txt -Append
+          if ($LASTEXITCODE -ne 0) { python tools/ci/emit.py "smoke bench ${{ matrix.arch }}" bench.txt; exit 1 }
+          & $exe --dump-scene scene.png 2>&1 | Tee-Object -FilePath dump.txt
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path scene.png)) { python tools/ci/emit.py "smoke dump ${{ matrix.arch }}" dump.txt; exit 1 }
       - name: Size gate
         shell: pwsh
         run: |

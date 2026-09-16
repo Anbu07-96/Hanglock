@@ -15,6 +15,12 @@ import hanglock_ref as h  # noqa: E402
 
 Q = 5  # decimals; cap-relative units, so 1e-5 of a cap height
 
+# The emitted text is checked in verbatim and then linted, so it has to satisfy the lints at the
+# source: `clippy::doc_markdown` wants a capitalised product name inside backticks, and CI runs
+# clippy with `-D warnings`. `tools/ci/currency.py source` compares *content*, not bytes, so the
+# layout `cargo fmt` applies to the committed file (one item per line, a comma before each closing
+# delimiter) is not drift — but the backticks are, because they are characters.
+
 
 def pt(p):
     return "Pt { x: %.*f, y: %.*f }" % (Q, p[0], Q, p[1])
@@ -28,7 +34,7 @@ def main():
     print("//! of *strokes* (polylines in a unit cap-height box, y down) rather than filled outlines,")
     print("//! because the painter already draws anti-aliased capsules for the cord — so type and cord")
     print("//! share one coverage function, one weight, one join style, and one cost model. No font")
-    print("//! file, no rasteriser, and nothing here needs ClearType (see docs/decisions/0001, which")
+    print("//! file, no rasteriser, and nothing here needs `ClearType` (see docs/decisions/0001, which")
     print("//! is a constraint on every transparent-window renderer, not on this one).")
     print()
     print("/// Extra advance per glyph, as a fraction of cap height. Together with the fixed")
