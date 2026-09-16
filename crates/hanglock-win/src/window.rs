@@ -80,7 +80,8 @@ impl HitShape {
         if lx.abs() <= self.hw + self.pad && ly.abs() <= self.hh + self.pad {
             return true;
         }
-        (p.x - self.anchor.x).abs() <= self.anchor_radius && (p.y - self.anchor.y).abs() <= self.anchor_radius
+        (p.x - self.anchor.x).abs() <= self.anchor_radius
+            && (p.y - self.anchor.y).abs() <= self.anchor_radius
     }
 
     /// Whether the point is on the ring and not on the plate — the re-anchor gesture.
@@ -235,7 +236,9 @@ pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
     }
 
     let title = sys::wide(cfg.title);
-    let ex = sys::WS_EX_LAYERED | sys::WS_EX_TOOLWINDOW | sys::WS_EX_NOACTIVATE
+    let ex = sys::WS_EX_LAYERED
+        | sys::WS_EX_TOOLWINDOW
+        | sys::WS_EX_NOACTIVATE
         | if cfg.topmost { sys::WS_EX_TOPMOST } else { 0 };
     let f = cfg.frame;
     let hwnd = unsafe {
@@ -312,7 +315,11 @@ impl Host {
     /// The frame clock asks this after every tick: it keeps the `TICK` timer alive only while the
     /// rope actually wants frames, and drops it to nothing when the object settles.
     pub fn sync_tick_timer(&mut self) {
-        let want = if self.rate_hz == 0 { 0 } else { (1000 / self.rate_hz.max(1) as u32).max(8) };
+        let want = if self.rate_hz == 0 {
+            0
+        } else {
+            (1000 / self.rate_hz.max(1) as u32).max(8)
+        };
         if want != self.tick_ms {
             unsafe {
                 if want == 0 {
@@ -360,11 +367,19 @@ impl Host {
         if cw != w.max(1) as u32 || ch != h.max(1) as u32 {
             self.surface.resize(w.max(1) as u32, h.max(1) as u32);
         }
-        if (frame.x0 - self.frame.x0).abs() > 0.5 || (frame.y0 - self.frame.y0).abs() > 0.5 || self.frame.w() as i32 != w || self.frame.h() as i32 != h {
+        if (frame.x0 - self.frame.x0).abs() > 0.5
+            || (frame.y0 - self.frame.y0).abs() > 0.5
+            || self.frame.w() as i32 != w
+            || self.frame.h() as i32 != h
+        {
             unsafe {
                 sys::SetWindowPos(
                     self.hwnd,
-                    if self.topmost { sys::HWND_TOPMOST } else { sys::HWND_NOTOPMOST },
+                    if self.topmost {
+                        sys::HWND_TOPMOST
+                    } else {
+                        sys::HWND_NOTOPMOST
+                    },
                     frame.x0 as i32,
                     frame.y0 as i32,
                     w,
@@ -384,7 +399,11 @@ impl Host {
         unsafe {
             sys::SetWindowPos(
                 self.hwnd,
-                if topmost { sys::HWND_TOPMOST } else { sys::HWND_NOTOPMOST },
+                if topmost {
+                    sys::HWND_TOPMOST
+                } else {
+                    sys::HWND_NOTOPMOST
+                },
                 0,
                 0,
                 0,
@@ -569,7 +588,14 @@ unsafe extern "system" fn wndproc<A: AppHook + 'static>(
             };
             host.last_cursor = pt;
             let f = host.frame;
-            app.on_input(host, Input::Move { at: Vec2::new(p.x - f.x0, p.y - f.y0), vel, dt });
+            app.on_input(
+                host,
+                Input::Move {
+                    at: Vec2::new(p.x - f.x0, p.y - f.y0),
+                    vel,
+                    dt,
+                },
+            );
             0
         }
         sys::WM_LBUTTONDOWN => {
@@ -577,7 +603,12 @@ unsafe extern "system" fn wndproc<A: AppHook + 'static>(
             host.captured = true;
             let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
             let f = host.frame;
-            app.on_input(host, Input::Press { at: Vec2::new(x - f.x0, y - f.y0) });
+            app.on_input(
+                host,
+                Input::Press {
+                    at: Vec2::new(x - f.x0, y - f.y0),
+                },
+            );
             0
         }
         sys::WM_LBUTTONUP => {
@@ -586,7 +617,14 @@ unsafe extern "system" fn wndproc<A: AppHook + 'static>(
             let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
             let f = host.frame;
             let dt = host.elapsed();
-            app.on_input(host, Input::Release { at: Vec2::new(x - f.x0, y - f.y0), vel: Vec2::ZERO, dt });
+            app.on_input(
+                host,
+                Input::Release {
+                    at: Vec2::new(x - f.x0, y - f.y0),
+                    vel: Vec2::ZERO,
+                    dt,
+                },
+            );
             0
         }
         sys::WM_RBUTTONUP => {
@@ -657,7 +695,14 @@ unsafe extern "system" fn wndproc<A: AppHook + 'static>(
             let (mouse, _id) = tray::tray_event(l);
             if mouse == sys::WM_LBUTTONUP || mouse == sys::WM_LBUTTONDBLCLK_TRAY {
                 let vis = host.is_visible();
-                app.on_command(host, if vis { Command::ToggleVisible } else { Command::ToggleVisible });
+                app.on_command(
+                    host,
+                    if vis {
+                        Command::ToggleVisible
+                    } else {
+                        Command::ToggleVisible
+                    },
+                );
                 app.on_command(host, Command::ToggleVisible);
                 host.sync_tick_timer();
             } else if mouse == sys::WM_RBUTTONUP {

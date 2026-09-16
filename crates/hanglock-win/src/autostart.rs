@@ -23,7 +23,11 @@ extern "system" {
         data: *const core::ffi::c_void,
         len: u32,
     ) -> i32;
-    fn RegDeleteKeyValueW(key: *mut core::ffi::c_void, subkey: *const u16, value: *const u16) -> i32;
+    fn RegDeleteKeyValueW(
+        key: *mut core::ffi::c_void,
+        subkey: *const u16,
+        value: *const u16,
+    ) -> i32;
     fn RegQueryValueExW(
         key: *mut core::ffi::c_void,
         value: *const u16,
@@ -32,7 +36,13 @@ extern "system" {
         data: *mut u8,
         len: *mut u32,
     ) -> i32;
-    fn RegOpenKeyExW(key: *mut core::ffi::c_void, subkey: *const u16, options: u32, access: u32, out: *mut *mut core::ffi::c_void) -> i32;
+    fn RegOpenKeyExW(
+        key: *mut core::ffi::c_void,
+        subkey: *const u16,
+        options: u32,
+        access: u32,
+        out: *mut *mut core::ffi::c_void,
+    ) -> i32;
     fn RegCloseKey(key: *mut core::ffi::c_void) -> i32;
 }
 
@@ -49,7 +59,11 @@ pub fn set_enabled(exe: &str, enabled: bool) -> Result<(), i32> {
     if !enabled {
         let rc = unsafe { RegDeleteKeyValueW(HKEY_CURRENT_USER, sub.as_ptr(), val.as_ptr()) };
         // S_FALSE/FILE_NOT_FOUND on a key we never wrote is the success case for "off".
-        return if rc == ERROR_SUCCESS || rc == 2 { Ok(()) } else { Err(rc) };
+        return if rc == ERROR_SUCCESS || rc == 2 {
+            Ok(())
+        } else {
+            Err(rc)
+        };
     }
     let data = format!("\"{exe}\" --background");
     let wide = crate::sys::wide(&data);
@@ -83,7 +97,14 @@ pub fn is_enabled() -> bool {
         let mut kind = 0u32;
         let mut len = 0u32;
         // Two calls: the first with a null buffer reports the size we need.
-        let probe = RegQueryValueExW(key, val.as_ptr(), std::ptr::null(), &mut kind, std::ptr::null_mut(), &mut len);
+        let probe = RegQueryValueExW(
+            key,
+            val.as_ptr(),
+            std::ptr::null(),
+            &mut kind,
+            std::ptr::null_mut(),
+            &mut len,
+        );
         RegCloseKey(key);
         probe == ERROR_SUCCESS && len > 0
     }

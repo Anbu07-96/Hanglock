@@ -137,7 +137,7 @@ pub fn apply_stop(nodes: &mut [Node], anchor: Vec2, cfg: &RopeConfig) {
 /// While the settle brake is on, ease the hanging line back under the anchor. See
 /// [`RopeConfig::relevel`].
 pub fn relevel(nodes: &mut [Node], anchor_x: f64, amount: f64) {
-    for i in 1..nodes.len() {
-        nodes[i].pos.x += (anchor_x - nodes[i].pos.x) * amount;
+    for node in &mut nodes[1..] {
+        node.pos.x += (anchor_x - node.pos.x) * amount;
     }
 }

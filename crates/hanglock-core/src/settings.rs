@@ -132,13 +132,22 @@ impl Settings {
         s.push_str("\n[overlay]\n");
         s.push_str(&format!("enabled = {}\n", yes(self.overlay.enabled)));
         s.push_str(&format!("monitor_index = {}\n", self.overlay.monitor_index));
-        s.push_str(&format!("anchor_ratio = {}\n", fix(self.overlay.anchor_ratio)));
+        s.push_str(&format!(
+            "anchor_ratio = {}\n",
+            fix(self.overlay.anchor_ratio)
+        ));
         s.push_str(&format!("hang = {}\n", fix(self.overlay.hang)));
         s.push_str(&format!("scale = {}\n", fix(self.overlay.scale)));
         s.push_str(&format!("opacity = {}\n", fix(self.overlay.opacity)));
         s.push_str(&format!("topmost = {}\n", yes(self.overlay.topmost)));
-        s.push_str(&format!("click_through = \"{}\"\n", self.overlay.click_through.as_str()));
-        s.push_str(&format!("respect_taskbar = {}\n", yes(self.overlay.respect_taskbar)));
+        s.push_str(&format!(
+            "click_through = \"{}\"\n",
+            self.overlay.click_through.as_str()
+        ));
+        s.push_str(&format!(
+            "respect_taskbar = {}\n",
+            yes(self.overlay.respect_taskbar)
+        ));
         s.push_str(&format!("margin = {}\n", fix(self.overlay.margin)));
         s.push_str("\n[face]\n");
         s.push_str(&format!("hour12 = {}\n", yes(self.face.hour12)));
@@ -146,7 +155,10 @@ impl Settings {
         s.push_str(&format!("meridiem = {}\n", yes(self.face.meridiem)));
         s.push_str(&format!("posture = \"{}\"\n", self.face.posture.as_str()));
         s.push_str("\n[general]\n");
-        s.push_str(&format!("launch_at_login = {}\n", yes(self.general.launch_at_login)));
+        s.push_str(&format!(
+            "launch_at_login = {}\n",
+            yes(self.general.launch_at_login)
+        ));
         s.push_str(&format!("fps_cap = {}\n", self.general.fps_cap));
         s
     }
@@ -180,40 +192,41 @@ impl Settings {
             match (sec, key) {
                 ("", "schema") => out.schema = int_of(value, i64::from(out.schema)).max(1) as u32,
                 ("overlay", "enabled") => out.overlay.enabled = bool_of(value),
-                ("overlay", "monitor_index") => out.overlay.monitor_index = int_of(value, 0).max(0) as u32,
+                ("overlay", "monitor_index") => {
+                    out.overlay.monitor_index = int_of(value, 0).max(0) as u32
+                }
                 ("overlay", "anchor_ratio") => out.overlay.anchor_ratio = float_of(value, 0.5),
                 ("overlay", "hang") => out.overlay.hang = float_of(value, 150.0),
                 ("overlay", "scale") => out.overlay.scale = float_of(value, 1.0),
                 ("overlay", "opacity") => out.overlay.opacity = float_of(value, 1.0),
                 ("overlay", "topmost") => out.overlay.topmost = bool_of(value),
-                ("overlay", "click_through") => {
-                    match ClickThrough::parse(value) {
-                        Some(v) => out.overlay.click_through = v,
-                        None => warnings.push(format!(
-                            "line {}: unknown click_through {value:?}, keeping {}",
-                            n + 1,
-                            out.overlay.click_through.as_str(),
-                        )),
-                    }
-                }
+                ("overlay", "click_through") => match ClickThrough::parse(value) {
+                    Some(v) => out.overlay.click_through = v,
+                    None => warnings.push(format!(
+                        "line {}: unknown click_through {value:?}, keeping {}",
+                        n + 1,
+                        out.overlay.click_through.as_str(),
+                    )),
+                },
                 ("overlay", "respect_taskbar") => out.overlay.respect_taskbar = bool_of(value),
                 ("overlay", "margin") => out.overlay.margin = float_of(value, 16.0),
                 ("face", "hour12") => out.face.hour12 = bool_of(value),
                 ("face", "seconds") => out.face.seconds = bool_of(value),
                 ("face", "meridiem") => out.face.meridiem = bool_of(value),
-                ("face", "posture") => {
-                    match PostureKind::parse(value) {
-                        Some(v) => out.face.posture = v,
-                        None => warnings.push(format!(
-                            "line {}: unknown posture {value:?}, keeping {}",
-                            n + 1,
-                            out.face.posture.as_str(),
-                        )),
-                    }
-                }
+                ("face", "posture") => match PostureKind::parse(value) {
+                    Some(v) => out.face.posture = v,
+                    None => warnings.push(format!(
+                        "line {}: unknown posture {value:?}, keeping {}",
+                        n + 1,
+                        out.face.posture.as_str(),
+                    )),
+                },
                 ("general", "launch_at_login") => out.general.launch_at_login = bool_of(value),
                 ("general", "fps_cap") => out.general.fps_cap = int_of(value, 60).max(0) as u32,
-                _ => warnings.push(format!("line {}: ignored unknown key {key} in [{sec}]", n + 1)),
+                _ => warnings.push(format!(
+                    "line {}: ignored unknown key {key} in [{sec}]",
+                    n + 1
+                )),
             }
         }
         out.sanitize();
@@ -231,7 +244,11 @@ fn finite(v: f64, fallback: f64) -> f64 {
 }
 
 fn yes(b: bool) -> &'static str {
-    if b { "true" } else { "false" }
+    if b {
+        "true"
+    } else {
+        "false"
+    }
 }
 
 /// Trailing zeros trimmed, but never scientific notation: a settings file is meant to be readable,

@@ -31,7 +31,10 @@ pub fn enumerate(primary_hwnd: sys::HWND) -> Vec<Monitor> {
     let mut guard = 0;
     while x < vx + vw && guard < 4096 {
         guard += 1;
-        let pt = sys::POINT { x: x + 8, y: vy + 8 };
+        let pt = sys::POINT {
+            x: x + 8,
+            y: vy + 8,
+        };
         let hmon = unsafe { sys::MonitorFromPoint(pt, sys::MONITOR_DEFAULTTONEAREST) };
         if !hmon.is_null() {
             let (r, w, flags) = info(hmon);
@@ -79,7 +82,11 @@ fn info(hmon: *mut std::ffi::c_void) -> (sys::WINRECT, sys::WINRECT, u32) {
 fn scale_for_rect(rect: sys::WINRECT, hwnd: sys::HWND) -> f64 {
     let _ = rect;
     let dpi = unsafe { sys::GetDpiForWindow(hwnd) };
-    let dpi = if dpi == 0 { sys::dpi_of_window(hwnd) } else { dpi };
+    let dpi = if dpi == 0 {
+        sys::dpi_of_window(hwnd)
+    } else {
+        dpi
+    };
     (dpi as f64 / 96.0).max(0.5)
 }
 
@@ -90,15 +97,29 @@ pub fn monitor_for(hwnd: sys::HWND, index: u32) -> Monitor {
         let cx = unsafe { sys::GetSystemMetrics(sys::SM_CXSCREEN) };
         let cy = unsafe { sys::GetSystemMetrics(sys::SM_CYSCREEN) };
         (
-            sys::WINRECT { left: 0, top: 0, right: cx, bottom: cy },
-            sys::WINRECT { left: 0, top: 0, right: cx, bottom: cy },
+            sys::WINRECT {
+                left: 0,
+                top: 0,
+                right: cx,
+                bottom: cy,
+            },
+            sys::WINRECT {
+                left: 0,
+                top: 0,
+                right: cx,
+                bottom: cy,
+            },
             sys::MONITORINFOF_PRIMARY,
         )
     } else {
         info(hmon)
     };
     let dpi = unsafe { sys::GetDpiForWindow(hwnd) };
-    let dpi = if dpi == 0 { sys::dpi_of_window(hwnd) } else { dpi };
+    let dpi = if dpi == 0 {
+        sys::dpi_of_window(hwnd)
+    } else {
+        dpi
+    };
     let (taskbar_top, auto_hide) = sys::query_taskbar(hwnd).unwrap_or((false, false));
     Monitor {
         index,

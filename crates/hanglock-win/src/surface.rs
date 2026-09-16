@@ -71,7 +71,14 @@ impl Surface {
             info.header.bi_bit_count = 32;
             info.header.bi_compression = sys::BI_RGB;
             let mut bits: *mut c_void = std::ptr::null_mut();
-            let bmp = sys::CreateDIBSection(dc, &info, sys::DIB_RGB_COLORS as u32, &mut bits, std::ptr::null_mut(), 0);
+            let bmp = sys::CreateDIBSection(
+                dc,
+                &info,
+                sys::DIB_RGB_COLORS as u32,
+                &mut bits,
+                std::ptr::null_mut(),
+                0,
+            );
             sys::ReleaseDC(std::ptr::null_mut(), screen);
             if bmp.is_null() || bits.is_null() {
                 if !dc.is_null() {
@@ -129,9 +136,17 @@ impl Surface {
                 source_constant_alpha: 255,
                 alpha_format: sys::AC_SRC_ALPHA,
             };
-            let size = sys::SIZE { cx: self.w as i32, cy: self.h as i32 };
+            let size = sys::SIZE {
+                cx: self.w as i32,
+                cy: self.h as i32,
+            };
             let src_pt = sys::POINT { x: 0, y: 0 };
-            let dirty = sys::WINRECT { left: x0 as i32, top: y0 as i32, right: x1 as i32, bottom: y1 as i32 };
+            let dirty = sys::WINRECT {
+                left: x0 as i32,
+                top: y0 as i32,
+                right: x1 as i32,
+                bottom: y1 as i32,
+            };
             // Indirect, not plain: `UpdateLayeredWindow` has no update-rect parameter at all, so
             // this is the only call that lets a settled clock present its digits' box instead of
             // the whole surface. `pt_dst` is null, which means "do not move the window".

@@ -17,7 +17,12 @@
 //!     them would make the executable fail to *start* there. Through `GetProcAddress` a missing
 //!     export is a value the caller can test.
 
-#![allow(dead_code, non_camel_case_types, non_snake_case, clippy::upper_case_acronyms)]
+#![allow(
+    dead_code,
+    non_camel_case_types,
+    non_snake_case,
+    clippy::upper_case_acronyms
+)]
 
 use std::ffi::c_void;
 use std::mem::size_of;
@@ -397,7 +402,12 @@ extern "system" {
     pub fn PostQuitMessage(code: i32);
     pub fn PostMessageW(hwnd: HWND, msg: UINT, w: WPARAM, l: LPARAM) -> BOOL;
     pub fn SendMessageW(hwnd: HWND, msg: UINT, w: WPARAM, l: LPARAM) -> LRESULT;
-    pub fn SetTimer(hwnd: HWND, id: UINT_PTR, elapsed: UINT, cb: Option<unsafe extern "system" fn(HWND, UINT, UINT_PTR, DWORD)>) -> UINT_PTR;
+    pub fn SetTimer(
+        hwnd: HWND,
+        id: UINT_PTR,
+        elapsed: UINT,
+        cb: Option<unsafe extern "system" fn(HWND, UINT, UINT_PTR, DWORD)>,
+    ) -> UINT_PTR;
     pub fn KillTimer(hwnd: HWND, id: UINT_PTR) -> BOOL;
     pub fn SetCapture(hwnd: HWND) -> HWND;
     pub fn ReleaseCapture() -> BOOL;
@@ -409,7 +419,12 @@ extern "system" {
     pub fn MonitorFromWindow(hwnd: HWND, flags: DWORD) -> *mut c_void;
     pub fn MonitorFromPoint(pt: POINT, flags: DWORD) -> *mut c_void;
     pub fn GetMonitorInfoW(monitor: *mut c_void, info: *mut MONITORINFO) -> BOOL;
-    pub fn SystemParametersInfoW(action: UINT, param: UINT, value: *mut c_void, flags: UINT) -> BOOL;
+    pub fn SystemParametersInfoW(
+        action: UINT,
+        param: UINT,
+        value: *mut c_void,
+        flags: UINT,
+    ) -> BOOL;
     pub fn CreateIcon(
         instance: HMODULE,
         w: i32,
@@ -422,7 +437,14 @@ extern "system" {
     pub fn DestroyIcon(icon: HICON) -> BOOL;
     pub fn CreatePopupMenu() -> HMENU;
     pub fn AppendMenuW(menu: HMENU, flags: UINT, id: UINT_PTR, text: *const WCHAR) -> BOOL;
-    pub fn TrackPopupMenuEx(menu: HMENU, flags: UINT, x: i32, y: i32, hwnd: HWND, tpm: *const c_void) -> UINT;
+    pub fn TrackPopupMenuEx(
+        menu: HMENU,
+        flags: UINT,
+        x: i32,
+        y: i32,
+        hwnd: HWND,
+        tpm: *const c_void,
+    ) -> UINT;
     pub fn DestroyMenu(menu: HMENU) -> BOOL;
     pub fn CheckMenuItem(menu: HMENU, id: UINT_PTR, flags: UINT) -> UINT;
     pub fn EnableMenuItem(menu: HMENU, id: UINT_PTR, flags: UINT) -> BOOL;
@@ -619,10 +641,18 @@ pub fn query_taskbar(hwnd: HWND) -> Option<(bool, bool)> {
         }
         type Fn = unsafe extern "system" fn(DWORD, *mut APPBARDATA) -> ULONG;
         let f: Fn = std::mem::transmute::<*const c_void, Fn>(addr);
-        let mut state = APPBARDATA { cb_size: size_of::<APPBARDATA>() as UINT, hwnd, ..Default::default() };
+        let mut state = APPBARDATA {
+            cb_size: size_of::<APPBARDATA>() as UINT,
+            hwnd,
+            ..Default::default()
+        };
         let state_ok = f(ABM_GETSTATE, &mut state) != 0;
         let auto_hide = state_ok && (state.l_param as DWORD & ABS_AUTOHIDE) != 0;
-        let mut pos = APPBARDATA { cb_size: size_of::<APPBARDATA>() as UINT, hwnd, ..Default::default() };
+        let mut pos = APPBARDATA {
+            cb_size: size_of::<APPBARDATA>() as UINT,
+            hwnd,
+            ..Default::default()
+        };
         if f(ABM_GETTASKBARPOS, &mut pos) == 0 {
             return Some((false, auto_hide));
         }

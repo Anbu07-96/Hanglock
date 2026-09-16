@@ -21,4 +21,4 @@ pub mod tray;
 pub mod window;
 
 pub use surface::Surface;
-pub use window::{run, AppHook, Cursor, Host, HitShape, OverlayConfig, TIMER_SECOND, TIMER_TICK};
+pub use window::{run, AppHook, Cursor, HitShape, Host, OverlayConfig, TIMER_SECOND, TIMER_TICK};

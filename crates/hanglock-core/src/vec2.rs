@@ -20,17 +20,26 @@ impl Vec2 {
 
     #[must_use]
     pub fn add(self, o: Self) -> Self {
-        Self { x: self.x + o.x, y: self.y + o.y }
+        Self {
+            x: self.x + o.x,
+            y: self.y + o.y,
+        }
     }
 
     #[must_use]
     pub fn sub(self, o: Self) -> Self {
-        Self { x: self.x - o.x, y: self.y - o.y }
+        Self {
+            x: self.x - o.x,
+            y: self.y - o.y,
+        }
     }
 
     #[must_use]
     pub fn scale(self, k: f64) -> Self {
-        Self { x: self.x * k, y: self.y * k }
+        Self {
+            x: self.x * k,
+            y: self.y * k,
+        }
     }
 
     #[must_use]

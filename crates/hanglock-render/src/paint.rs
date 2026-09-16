@@ -143,7 +143,14 @@ fn annulus(cv: &mut Canvas, c: Vec2, r: f64, w_: f64, col: Rgba) {
             if cov <= 0.002 {
                 continue;
             }
-            cv.blend(x as i32, y as i32, (col.b * 255.0 * cov) as u16, (col.g * 255.0 * cov) as u16, (col.r * 255.0 * cov) as u16, (cov * 255.0) as u16);
+            cv.blend(
+                x as i32,
+                y as i32,
+                (col.b * 255.0 * cov) as u16,
+                (col.g * 255.0 * cov) as u16,
+                (col.r * 255.0 * cov) as u16,
+                (cov * 255.0) as u16,
+            );
         }
         cv.touch_row(y as i32, x0.max(0) as i32, x1.min(ww - 1) as i32);
     }
@@ -155,7 +162,8 @@ pub fn text_advance(chars: usize, cap: f64) -> f64 {
     if chars == 0 {
         return 0.0;
     }
-    chars as f64 * (cap * f64::from(ADVANCE) + cap * f64::from(TRACKING)) - cap * f64::from(TRACKING)
+    chars as f64 * (cap * f64::from(ADVANCE) + cap * f64::from(TRACKING))
+        - cap * f64::from(TRACKING)
 }
 
 #[must_use]
@@ -178,15 +186,25 @@ pub fn text_bounds(scene: &Scene, theme: &Theme) -> Rect {
     let suffix = scene.text.suffix_str();
     let scap = scene.card_h * theme.suffix_cap;
     let stotal = text_advance(adv(suffix), scap);
-    let gap = if suffix.is_empty() { 0.0 } else { theme.suffix_gap * scene.scale };
+    let gap = if suffix.is_empty() {
+        0.0
+    } else {
+        theme.suffix_gap * scene.scale
+    };
     let ox = centre.x - (total + gap + stotal) * 0.5;
     let oy = centre.y - scene.card_h * 0.5 + (scene.card_h - cap) * 0.5;
     for (i, ch) in main.chars().enumerate() {
-        let Some(g) = face_data::glyph(ch) else { continue };
+        let Some(g) = face_data::glyph(ch) else {
+            continue;
+        };
         let gx = ox + i as f64 * (cap * f64::from(ADVANCE) + cap * f64::from(TRACKING));
         for ln in g.lines {
             for p in ln.iter() {
-                let q = rot(centre, scene.theta, Vec2::new(gx + f64::from(p.x) * cap, oy + f64::from(p.y) * cap));
+                let q = rot(
+                    centre,
+                    scene.theta,
+                    Vec2::new(gx + f64::from(p.x) * cap, oy + f64::from(p.y) * cap),
+                );
                 b[0] = b[0].min(q.x - rad);
                 b[1] = b[1].min(q.y - rad);
                 b[2] = b[2].max(q.x + rad);
@@ -194,7 +212,11 @@ pub fn text_bounds(scene: &Scene, theme: &Theme) -> Rect {
             }
         }
         for d in g.dots.iter() {
-            let q = rot(centre, scene.theta, Vec2::new(gx + f64::from(d.x) * cap, oy + f64::from(d.y) * cap));
+            let q = rot(
+                centre,
+                scene.theta,
+                Vec2::new(gx + f64::from(d.x) * cap, oy + f64::from(d.y) * cap),
+            );
             b[0] = b[0].min(q.x - f64::from(d.r) * cap);
             b[1] = b[1].min(q.y - f64::from(d.r) * cap);
             b[2] = b[2].max(q.x + f64::from(d.r) * cap);
@@ -205,11 +227,17 @@ pub fn text_bounds(scene: &Scene, theme: &Theme) -> Rect {
         let sox = ox + total + gap;
         let soy = oy - scap * 0.12;
         for (i, ch) in suffix.chars().enumerate() {
-            let Some(g) = face_data::glyph(ch) else { continue };
+            let Some(g) = face_data::glyph(ch) else {
+                continue;
+            };
             let gx = sox + i as f64 * (scap * f64::from(ADVANCE) + scap * 0.16);
             for ln in g.lines {
                 for p in ln.iter() {
-                    let q = rot(centre, scene.theta, Vec2::new(gx + f64::from(p.x) * scap, soy + f64::from(p.y) * scap));
+                    let q = rot(
+                        centre,
+                        scene.theta,
+                        Vec2::new(gx + f64::from(p.x) * scap, soy + f64::from(p.y) * scap),
+                    );
                     b[0] = b[0].min(q.x);
                     b[1] = b[1].min(q.y);
                     b[2] = b[2].max(q.x);
@@ -233,25 +261,43 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
     let suffix = scene.text.suffix_str();
     let scap = scene.card_h * theme.suffix_cap;
     let stotal = text_advance(suffix.chars().count(), scap);
-    let gap = if suffix.is_empty() { 0.0 } else { theme.suffix_gap * scene.scale };
+    let gap = if suffix.is_empty() {
+        0.0
+    } else {
+        theme.suffix_gap * scene.scale
+    };
     let ox = centre.x - (total + gap + stotal) * 0.5;
     let oy = centre.y - scene.card_h * 0.5 + (scene.card_h - cap) * 0.5;
 
     for (i, ch) in main.chars().enumerate() {
-        let Some(g) = face_data::glyph(ch) else { continue };
+        let Some(g) = face_data::glyph(ch) else {
+            continue;
+        };
         let gx = ox + i as f64 * (cap * f64::from(ADVANCE) + cap * f64::from(TRACKING));
         for ln in g.lines {
             if ln.len() < 2 {
                 continue;
             }
             for w in ln.windows(2) {
-                let a = rot(centre, scene.theta, Vec2::new(gx + f64::from(w[0].x) * cap, oy + f64::from(w[0].y) * cap));
-                let b = rot(centre, scene.theta, Vec2::new(gx + f64::from(w[1].x) * cap, oy + f64::from(w[1].y) * cap));
+                let a = rot(
+                    centre,
+                    scene.theta,
+                    Vec2::new(gx + f64::from(w[0].x) * cap, oy + f64::from(w[0].y) * cap),
+                );
+                let b = rot(
+                    centre,
+                    scene.theta,
+                    Vec2::new(gx + f64::from(w[1].x) * cap, oy + f64::from(w[1].y) * cap),
+                );
                 capsule(cv, a, b, rad, theme.ink, 1.05);
             }
         }
         for d in g.dots.iter() {
-            let p = rot(centre, scene.theta, Vec2::new(gx + f64::from(d.x) * cap, oy + f64::from(d.y) * cap));
+            let p = rot(
+                centre,
+                scene.theta,
+                Vec2::new(gx + f64::from(d.x) * cap, oy + f64::from(d.y) * cap),
+            );
             capsule(cv, p, p, f64::from(d.r) * cap * 0.95, theme.ink, 1.05);
         }
     }
@@ -259,16 +305,39 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
         let sox = ox + total + gap;
         let soy = oy - scap * 0.12;
         for (i, ch) in suffix.chars().enumerate() {
-            let Some(g) = face_data::glyph(ch) else { continue };
+            let Some(g) = face_data::glyph(ch) else {
+                continue;
+            };
             let gx = sox + i as f64 * (scap * f64::from(ADVANCE) + scap * 0.16);
             for ln in g.lines {
                 if ln.len() < 2 {
                     continue;
                 }
                 for w in ln.windows(2) {
-                    let a = rot(centre, scene.theta, Vec2::new(gx + f64::from(w[0].x) * scap, soy + f64::from(w[0].y) * scap));
-                    let b = rot(centre, scene.theta, Vec2::new(gx + f64::from(w[1].x) * scap, soy + f64::from(w[1].y) * scap));
-                    capsule(cv, a, b, f64::from(STROKE_RATIO) * 0.5 * scap * 1.36, theme.accent, 1.05);
+                    let a = rot(
+                        centre,
+                        scene.theta,
+                        Vec2::new(
+                            gx + f64::from(w[0].x) * scap,
+                            soy + f64::from(w[0].y) * scap,
+                        ),
+                    );
+                    let b = rot(
+                        centre,
+                        scene.theta,
+                        Vec2::new(
+                            gx + f64::from(w[1].x) * scap,
+                            soy + f64::from(w[1].y) * scap,
+                        ),
+                    );
+                    capsule(
+                        cv,
+                        a,
+                        b,
+                        f64::from(STROKE_RATIO) * 0.5 * scap * 1.36,
+                        theme.accent,
+                        1.05,
+                    );
                 }
             }
         }
@@ -293,19 +362,41 @@ pub fn paint(scene: &Scene, cv: &mut Canvas, theme: &Theme) {
     }
     let w = (1.7 * scene.scale).max(scene.card_h * 0.026);
     for i in 0..last {
-        capsule(cv, pts[i].add(Vec2::new(1.3, 1.3)), pts[i + 1].add(Vec2::new(1.3, 1.3)), w * 1.6, theme.cord_shadow, 1.05);
+        capsule(
+            cv,
+            pts[i].add(Vec2::new(1.3, 1.3)),
+            pts[i + 1].add(Vec2::new(1.3, 1.3)),
+            w * 1.6,
+            theme.cord_shadow,
+            1.05,
+        );
     }
     for i in 0..last {
         capsule(cv, pts[i], pts[i + 1], w, theme.cord, 1.05);
     }
     for i in 0..last {
         let o = Vec2::new(-w * 0.30, -w * 0.30);
-        capsule(cv, pts[i].add(o), pts[i + 1].add(o), w * 0.34, theme.cord_lit, 1.05);
+        capsule(
+            cv,
+            pts[i].add(o),
+            pts[i + 1].add(o),
+            w * 0.34,
+            theme.cord_lit,
+            1.05,
+        );
     }
 
     // 2. the mount: a clamp against the top of the screen, and the ring the cord runs through.
     let a = scene.anchor;
-    box_shadow(cv, a, Vec2::new(21.0 * scene.scale, 4.2 * scene.scale), 3.0 * scene.scale, 1.0, 2.2, 0.20);
+    box_shadow(
+        cv,
+        a,
+        Vec2::new(21.0 * scene.scale, 4.2 * scene.scale),
+        3.0 * scene.scale,
+        1.0,
+        2.2,
+        0.20,
+    );
     box_fill(
         cv,
         Vec2::new(a.x, a.y + 0.7 * scene.scale),
@@ -315,14 +406,22 @@ pub fn paint(scene: &Scene, cv: &mut Canvas, theme: &Theme) {
         theme.mount,
         1.05,
     );
-    annulus(cv, Vec2::new(a.x, a.y + 8.6 * scene.scale), 3.5 * scene.scale, 1.25 * scene.scale, theme.mount);
+    annulus(
+        cv,
+        Vec2::new(a.x, a.y + 8.6 * scene.scale),
+        3.5 * scene.scale,
+        1.25 * scene.scale,
+        theme.mount,
+    );
 
     // 3. the plate. Rotated, so every evaluation goes through the inverse transform; that is what
     // lets the same rounded-box distance serve a tilted object without a transformed render target.
     let c = scene.card_centre;
     let half = Vec2::new(scene.card_w * 0.5, scene.card_h * 0.5);
-    let rot_extent = (half.x.abs() * scene.theta.cos().abs() + half.y.abs() * scene.theta.sin().abs()) + 1.0;
-    let rot_extent_y = (half.x.abs() * scene.theta.sin().abs() + half.y.abs() * scene.theta.cos().abs()) + 1.0;
+    let rot_extent =
+        (half.x.abs() * scene.theta.cos().abs() + half.y.abs() * scene.theta.sin().abs()) + 1.0;
+    let rot_extent_y =
+        (half.x.abs() * scene.theta.sin().abs() + half.y.abs() * scene.theta.cos().abs()) + 1.0;
     let extent = Vec2::new(rot_extent, rot_extent_y);
     box_shadow(
         cv,
@@ -362,7 +461,12 @@ pub fn paint(scene: &Scene, cv: &mut Canvas, theme: &Theme) {
                 (r, g, bch, al) = (theme.rim.r, theme.rim.g, theme.rim.b, theme.rim.a);
             } else if ad < 1.6 {
                 if l.y < c.y - half.y + 1.6 {
-                    (r, g, bch, al) = (theme.rim_top.r, theme.rim_top.g, theme.rim_top.b, theme.rim_top.a);
+                    (r, g, bch, al) = (
+                        theme.rim_top.r,
+                        theme.rim_top.g,
+                        theme.rim_top.b,
+                        theme.rim_top.a,
+                    );
                 } else if l.y > c.y + half.y - 2.0 {
                     r = theme.rim_bottom.r;
                     g = theme.rim_bottom.g;
@@ -371,7 +475,14 @@ pub fn paint(scene: &Scene, cv: &mut Canvas, theme: &Theme) {
                 }
             }
             let a2 = al * cov * scene.opacity;
-            cv.blend(x as i32, y as i32, (bch * 255.0 * a2) as u16, (g * 255.0 * a2) as u16, (r * 255.0 * a2) as u16, (a2 * 255.0) as u16);
+            cv.blend(
+                x as i32,
+                y as i32,
+                (bch * 255.0 * a2) as u16,
+                (g * 255.0 * a2) as u16,
+                (r * 255.0 * a2) as u16,
+                (a2 * 255.0) as u16,
+            );
         }
         cv.touch_row(y as i32, x0.max(0) as i32, x1.min(w_ - 1) as i32);
     }

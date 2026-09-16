@@ -137,10 +137,26 @@ impl Tray {
         item!("Show seconds", Command::ToggleSeconds, st.seconds);
         item!("12-hour time", Command::Toggle12Hour, st.hour12);
         sep!();
-        item!("Posture: natural", Command::SetPosture(PostureKind::Natural), st.posture == PostureKind::Natural);
-        item!("Posture: plate", Command::SetPosture(PostureKind::Plate), st.posture == PostureKind::Plate);
-        item!("Posture: mounted", Command::SetPosture(PostureKind::Mounted), st.posture == PostureKind::Mounted);
-        item!("Posture: locked", Command::SetPosture(PostureKind::Locked), st.posture == PostureKind::Locked);
+        item!(
+            "Posture: natural",
+            Command::SetPosture(PostureKind::Natural),
+            st.posture == PostureKind::Natural
+        );
+        item!(
+            "Posture: plate",
+            Command::SetPosture(PostureKind::Plate),
+            st.posture == PostureKind::Plate
+        );
+        item!(
+            "Posture: mounted",
+            Command::SetPosture(PostureKind::Mounted),
+            st.posture == PostureKind::Mounted
+        );
+        item!(
+            "Posture: locked",
+            Command::SetPosture(PostureKind::Locked),
+            st.posture == PostureKind::Locked
+        );
         sep!();
         item!("Hang longer", Command::HangUp, false);
         item!("Hang shorter", Command::HangDown, false);
@@ -171,7 +187,10 @@ impl Tray {
                 sys::SetForegroundWindow(prev);
             }
             sys::DestroyMenu(menu);
-            items.iter().find(|(id, _)| *id == chosen as usize).map(|(_, c)| *c)
+            items
+                .iter()
+                .find(|(id, _)| *id == chosen as usize)
+                .map(|(_, c)| *c)
         }
     }
 }

@@ -43,7 +43,10 @@ fn behaviour_is_identical_at_60_and_120_hz() {
     }
     for i in 0..a.nodes.len() {
         let d = a.nodes[i].pos.dist(b.nodes[i].pos);
-        assert!(d < 1e-6, "node {i} diverged by {d} px between refresh rates");
+        assert!(
+            d < 1e-6,
+            "node {i} diverged by {d} px between refresh rates"
+        );
         assert!(a.nodes[i].pos.x.is_finite() && a.nodes[i].pos.y.is_finite());
     }
 }
@@ -58,7 +61,10 @@ fn the_cord_never_stretches_under_free_swing() {
         r.step(1.0 / 60.0);
         worst = worst.max(r.max_stretch());
     }
-    assert!(worst <= 1.02, "free swing stretched the cord to {worst}x rest length");
+    assert!(
+        worst <= 1.02,
+        "free swing stretched the cord to {worst}x rest length"
+    );
 }
 
 /// A flick that reverses direction and is yanked past the cord's reach: the input the solver must not
@@ -68,7 +74,10 @@ fn the_cord_never_stretches_under_free_swing() {
 fn a_hard_flick_stays_within_tolerance() {
     let mut r = rope();
     let c = r.card_centre();
-    assert!(r.begin_drag(c, 10.0), "press on the plate must start a drag");
+    assert!(
+        r.begin_drag(c, 10.0),
+        "press on the plate must start a drag"
+    );
     let mut worst = 1.0_f64;
     for i in 0..120 {
         let x = r.anchor.x + 240.0 * (i as f64 / 4.0).sin();
@@ -84,7 +93,10 @@ fn a_hard_flick_stays_within_tolerance() {
     // 1.03 rather than 1.02: while held, the terminal node is immovable, so the projection can only
     // shorten a link by moving the *other* end, and one frame of a 3600 px/s reversal is more than the
     // passes available can absorb. Measured on the reference model: 1.0248.
-    assert!(worst <= 1.03, "drag+flick stretched the cord to {worst}x rest length");
+    assert!(
+        worst <= 1.03,
+        "drag+flick stretched the cord to {worst}x rest length"
+    );
 }
 
 /// Synthetic, superhuman input must stay bounded and recover. No pointer can produce this; the
@@ -106,9 +118,15 @@ fn torture_input_stays_bounded_and_recovers() {
         r.step(1.0 / 60.0);
     }
     for n in &r.nodes {
-        assert!(n.pos.x.is_finite() && n.pos.y.is_finite(), "NaN after torture input");
+        assert!(
+            n.pos.x.is_finite() && n.pos.y.is_finite(),
+            "NaN after torture input"
+        );
     }
-    assert!(worst < 1.5, "cord stretched to {worst}x under torture: no bounded recovery");
+    assert!(
+        worst < 1.5,
+        "cord stretched to {worst}x under torture: no bounded recovery"
+    );
     // And it settles: the brake and the friction must still win afterwards.
     assert!(r.sleeping, "solver never slept after a violent input");
 }
@@ -117,7 +135,10 @@ fn torture_input_stays_bounded_and_recovers() {
 fn the_anchor_is_pinned_and_heavier_at_the_end() {
     let r = rope();
     assert_eq!(r.nodes[0].inv_mass, 0.0, "anchor must be immovable");
-    assert!(r.nodes[r.nodes.len() - 1].inv_mass < 1.0, "the plate must be heavier than a cord node");
+    assert!(
+        r.nodes[r.nodes.len() - 1].inv_mass < 1.0,
+        "the plate must be heavier than a cord node"
+    );
     assert_eq!(r.nodes.len(), RopeConfig::default().segments + 1);
 }
 
@@ -134,7 +155,10 @@ fn a_release_keeps_its_momentum() {
     for i in 0..26 {
         let ang = -0.62 + 0.048 * i as f64;
         let reach = r.hang * r.cfg.reach_ratio;
-        let next = Vec2::new(r.anchor.x + ang.sin() * reach, r.anchor.y + ang.cos() * reach);
+        let next = Vec2::new(
+            r.anchor.x + ang.sin() * reach,
+            r.anchor.y + ang.cos() * reach,
+        );
         let vel = Vec2::new((next.x - prev.x) * 60.0, (next.y - prev.y) * 60.0);
         r.move_drag(next, vel);
         prev = next;
@@ -151,7 +175,10 @@ fn a_release_keeps_its_momentum() {
         }
     }
     let carried = extreme - start;
-    assert!(carried > 60.0, "throw carried only {carried:.1} px sideways: momentum was lost");
+    assert!(
+        carried > 60.0,
+        "throw carried only {carried:.1} px sideways: momentum was lost"
+    );
     assert!(
         extreme.abs() <= r.hang * (r.cfg.sweep_deg.to_radians().sin()) + 2.0,
         "swing left the sector: {extreme}"
@@ -169,7 +196,10 @@ fn drag_tracking_is_exact_at_human_speeds() {
         r.move_drag(target, Vec2::new(5000.0, 0.0));
         r.step(1.0 / 60.0);
         let err = r.card_centre().dist(r.reachable(target));
-        assert!(err < 1e-6, "held node lagged the cursor by {err} px at a human speed");
+        assert!(
+            err < 1e-6,
+            "held node lagged the cursor by {err} px at a human speed"
+        );
     }
 }
 
@@ -180,7 +210,10 @@ fn the_drag_target_cannot_leave_the_reachable_sector() {
     let clamped = r.reachable(beyond);
     let reach = r.hang * r.cfg.reach_ratio;
     let d = clamped.dist(r.anchor);
-    assert!(d <= reach + 1e-6, "clamped target at {d} px, beyond reach {reach}");
+    assert!(
+        d <= reach + 1e-6,
+        "clamped target at {d} px, beyond reach {reach}"
+    );
     // Above the anchor is not a place a cord can put the plate.
     let up = r.reachable(Vec2::new(r.anchor.x, r.anchor.y - 500.0));
     assert!(up.y > r.anchor.y, "target went above the anchor: {up:?}");
@@ -222,7 +255,11 @@ fn it_sleeps_hanging_straight() {
     assert!(r.sleeping);
     let off = (r.card_centre().x - r.anchor.x).abs();
     assert!(off < 0.25, "settled {:.2} px off vertical", off);
-    assert!(r.att.theta.abs() < 5e-3, "settled tilted {} rad", r.att.theta);
+    assert!(
+        r.att.theta.abs() < 5e-3,
+        "settled tilted {} rad",
+        r.att.theta
+    );
 }
 
 #[test]
@@ -234,7 +271,10 @@ fn a_stall_cannot_burst_into_catchup_steps() {
     r.step(60.0);
     let b = r.card_centre();
     let moved = b.dist(a);
-    assert!(moved < 12.0, "a 60 s stall advanced the rope {moved} px: accumulator is unclamped");
+    assert!(
+        moved < 12.0,
+        "a 60 s stall advanced the rope {moved} px: accumulator is unclamped"
+    );
 }
 
 #[test]
@@ -245,7 +285,13 @@ fn posture_clamps_tilt_and_lock_holds_it_level() {
         (Posture::MOUNTED, 0.05),
         (Posture::LOCKED, 1e-9),
     ] {
-        let mut r = Rope::new(RopeConfig::default(), CardSpec::default(), posture, Vec2::new(280.0, 7.0), 1.0);
+        let mut r = Rope::new(
+            RopeConfig::default(),
+            CardSpec::default(),
+            posture,
+            Vec2::new(280.0, 7.0),
+            1.0,
+        );
         r.host = Some(Rect::new(0.0, 0.0, 560.0, 300.0));
         let c = r.card_centre();
         r.begin_drag(c, 10.0);

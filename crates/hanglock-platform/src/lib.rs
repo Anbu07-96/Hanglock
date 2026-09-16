@@ -44,13 +44,26 @@ pub enum Command {
 pub enum Input {
     /// Left button down at a point. The host decides whether that point is on the object; the
     /// model's answer is `Rope::begin_drag`'s return value.
-    Press { at: Vec2 },
-    Move { at: Vec2, vel: Vec2, dt: f64 },
-    Release { at: Vec2, vel: Vec2 },
+    Press {
+        at: Vec2,
+    },
+    Move {
+        at: Vec2,
+        vel: Vec2,
+        dt: f64,
+    },
+    Release {
+        at: Vec2,
+        vel: Vec2,
+    },
     /// A wheel notch: positive is "hang longer".
-    Wheel { delta: i32 },
+    Wheel {
+        delta: i32,
+    },
     /// Right button: the host shows a menu at this point.
-    Context { at: Vec2 },
+    Context {
+        at: Vec2,
+    },
     /// Pointer entered or left the interactive region. Drives the cursor shape, and nothing else:
     /// there is no hover *effect*, because an effect that redraws on hover would keep a settled
     /// object awake.

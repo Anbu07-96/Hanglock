@@ -60,7 +60,14 @@ pub fn local_fields() -> (u32, u32, u32, u32, u32, u32) {
     unsafe {
         sys::GetLocalTime(&mut st);
     }
-    (st.year as u32, st.month as u32, st.day as u32, st.hour as u32, st.minute as u32, st.second as u32)
+    (
+        st.year as u32,
+        st.month as u32,
+        st.day as u32,
+        st.hour as u32,
+        st.minute as u32,
+        st.second as u32,
+    )
 }
 
 /// 100 ns intervals since 1601-01-01, the raw FILETIME value.

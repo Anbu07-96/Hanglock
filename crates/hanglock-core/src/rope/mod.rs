@@ -123,7 +123,7 @@ impl Rope {
     /// [`CardSpec::attach_inset`] above it, along the plate's own up direction.
     #[must_use]
     pub fn card_centre(&self) -> Vec2 {
-        self.nodes.last().map(|n| n.pos).unwrap_or(self.anchor)
+        self.nodes.last().map_or(self.anchor, |n| n.pos)
     }
 
     #[must_use]

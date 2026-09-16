@@ -12,7 +12,11 @@ fn crc32(data: &[u8]) -> u32 {
     for &b in data {
         c ^= u32::from(b);
         for _ in 0..8 {
-            c = if c & 1 != 0 { (c >> 1) ^ 0xEDB8_8320 } else { c >> 1 };
+            c = if c & 1 != 0 {
+                (c >> 1) ^ 0xEDB8_8320
+            } else {
+                c >> 1
+            };
         }
     }
     !c

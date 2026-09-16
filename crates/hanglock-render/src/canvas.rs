@@ -16,7 +16,12 @@ pub struct Canvas {
 impl Canvas {
     #[must_use]
     pub fn new(w: u32, h: u32) -> Self {
-        Self { w, h, px: vec![0; (w as usize) * (h as usize) * 4], drawn: [0.0; 4] }
+        Self {
+            w,
+            h,
+            px: vec![0; (w as usize) * (h as usize) * 4],
+            drawn: [0.0; 4],
+        }
     }
 
     pub fn resize(&mut self, w: u32, h: u32) {
