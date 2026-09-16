@@ -100,17 +100,19 @@ impl Posture {
     pub const NATURAL: Posture = Posture {
         stiffness: 120.0,
         damping: 9.0,
-        max_angle: 0.4538,
+        // math.radians(26.0) exactly: a rounded copy of the angle shifts every clamped
+        // frame of the attitude by 1.4e-5 rad, 140x the golden tolerance.
+        max_angle: 0.453_785_605_518_569_4,
     };
     pub const PLATE: Posture = Posture {
         stiffness: 420.0,
         damping: 24.0,
-        max_angle: 0.1571,
+        max_angle: 0.157_079_632_679_489_66,
     };
     pub const MOUNTED: Posture = Posture {
         stiffness: 1400.0,
         damping: 46.0,
-        max_angle: 0.0436,
+        max_angle: 0.043_633_231_299_858_24,
     };
     pub const LOCKED: Posture = Posture {
         stiffness: 4000.0,

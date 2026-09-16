@@ -47,7 +47,7 @@ pub fn relax(nodes: &mut [Node], rest_len: f64, cfg: &RopeConfig, held: Option<u
             let pb = nodes[i + 1].pos;
             let delta = pb.sub(pa);
             let dist = delta.len();
-            if dist <= f64::EPSILON {
+            if dist <= 1e-9 {
                 continue;
             }
             let ratio = (dist - rest_len) / dist / total;
@@ -56,7 +56,14 @@ pub fn relax(nodes: &mut [Node], rest_len: f64, cfg: &RopeConfig, held: Option<u
             let cb = corr.scale(ib);
             nodes[i].pos = pa.add(ca);
             nodes[i + 1].pos = pb.sub(cb);
-            let moved = ca.len().max(cb.len());
+            // Reference exit criterion: max over CORRECTION COMPONENTS, not vector norms —
+            // norms are sqrt(2)x larger on diagonal links, and the pass budget they leave behind
+            // is worth thousandths of a pixel on the frames that need every pass.
+            let moved = ca
+                .x
+                .abs()
+                .max(ca.y.abs())
+                .max(cb.x.abs().max(cb.y.abs()));
             if moved > worst {
                 worst = moved;
             }
@@ -92,7 +99,7 @@ pub fn project_stretch(nodes: &mut [Node], rest_len: f64, cfg: &RopeConfig, held
             let b = nodes[i + 1].pos;
             let d = b.sub(a);
             let dist = d.len();
-            if dist <= limit || dist <= f64::EPSILON {
+            if dist <= limit || dist <= 1e-9 {
                 continue;
             }
             let corr = d.scale((dist - limit) / dist / total);

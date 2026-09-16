@@ -243,7 +243,10 @@ impl Rope {
             let prev = self.nodes[i].prev;
             let brake = if self.braking { cfg.brake_step } else { 1.0 };
             let mut vel = cur.sub(prev).scale(cfg.damping * brake);
-            let moved = cur.sub(prev).len();
+            // The friction bite and the speed cap are measured on the DAMPED velocity — the
+            // reference takes hypot(vx, vy) after scaling; measuring the undamped delta
+            // divides by a slightly larger denominator and shrinks every link a hair more.
+            let moved = vel.len();
             if moved > 1e-12 {
                 let shrink = (moved - dv).max(0.0) / moved;
                 vel = vel.scale(shrink);
