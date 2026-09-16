@@ -1,6 +1,6 @@
 //! `Scene` → a buffer of premultiplied BGRA, plus the dirty rect to present.
 //!
-//! ## Why software, when Direct2D exists
+//! ## Why software, when `Direct2D` exists
 //!
 //! Three reasons, in order of how much they matter here.
 //!

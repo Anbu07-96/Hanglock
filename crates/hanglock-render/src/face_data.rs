@@ -5,7 +5,7 @@
 //! of *strokes* (polylines in a unit cap-height box, y down) rather than filled outlines,
 //! because the painter already draws anti-aliased capsules for the cord — so type and cord
 //! share one coverage function, one weight, one join style, and one cost model. No font
-//! file, no rasteriser, and nothing here needs ClearType (see docs/decisions/0001, which
+//! file, no rasteriser, and nothing here needs `ClearType` (see docs/decisions/0001, which
 //! is a constraint on every transparent-window renderer, not on this one).
 
 /// Extra advance per glyph, as a fraction of cap height. Together with the fixed

@@ -39,6 +39,13 @@ module_name_repetitions = "allow"
 # Vec2::add/sub stay inherent on purpose — see docs/architecture.md: the solver's arithmetic
 # stays visible at call sites; a general linear-algebra surface is the liability here.
 should_implement_trait = "allow"
+# The pixel kernels keep the reference model’s math notation (p: point, d: signed distance,
+# t: parameter) so the port can be diffed against it line by line; names invented to satisfy
+# the lint would obscure exactly the code a reviewer must check digit-for-digit.
+many_single_char_names = "allow"
+# Round-trip and bit-reproducibility tests assert exact float equality on purpose — an
+# epsilon would tolerate the single-ulp drift the golden traces exist to forbid.
+float_cmp = "allow"
 too_many_arguments = "allow"
 struct_excessive_bools = "allow"
 items_after_statements = "allow"

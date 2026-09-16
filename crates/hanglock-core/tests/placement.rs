@@ -112,7 +112,7 @@ fn an_overlay_wider_than_the_display_centres_instead_of_failing() {
 
 #[test]
 fn a_stale_monitor_index_degrades_to_the_primary() {
-    let mons = vec![
+    let mons = [
         m(0, 0.0, 0.0, 1920.0, 1080.0, 1.0),
         m(1, 1920.0, 0.0, 1920.0, 1080.0, 1.0),
     ];

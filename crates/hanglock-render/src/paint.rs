@@ -199,7 +199,7 @@ pub fn text_bounds(scene: &Scene, theme: &Theme) -> Rect {
         };
         let gx = ox + i as f64 * (cap * f64::from(ADVANCE) + cap * f64::from(TRACKING));
         for ln in g.lines {
-            for p in ln.iter() {
+            for p in &ln {
                 let q = rot(
                     centre,
                     scene.theta,
@@ -211,7 +211,7 @@ pub fn text_bounds(scene: &Scene, theme: &Theme) -> Rect {
                 b[3] = b[3].max(q.y + rad);
             }
         }
-        for d in g.dots.iter() {
+        for d in &g.dots {
             let q = rot(
                 centre,
                 scene.theta,
@@ -232,7 +232,7 @@ pub fn text_bounds(scene: &Scene, theme: &Theme) -> Rect {
             };
             let gx = sox + i as f64 * (scap * f64::from(ADVANCE) + scap * 0.16);
             for ln in g.lines {
-                for p in ln.iter() {
+                for p in &ln {
                     let q = rot(
                         centre,
                         scene.theta,
@@ -292,7 +292,7 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
                 capsule(cv, a, b, rad, theme.ink, 1.05);
             }
         }
-        for d in g.dots.iter() {
+        for d in &g.dots {
             let p = rot(
                 centre,
                 scene.theta,
@@ -346,47 +346,8 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
 
 /// Paint a whole frame. `cv` is cleared first by the caller, since the caller knows whether the
 /// frame is a repaint or a fresh size.
-pub fn paint(scene: &Scene, cv: &mut Canvas, theme: &Theme) {
-    cv.clear();
-    let n = scene.node_count as usize;
-    if n < 2 {
-        return;
-    }
-    let pts = &scene.nodes[..n];
-
-    // 1. the cord, cut where the plate covers it. Trimming by "inside the plate" rather than by a
-    // fixed inset is what keeps the joint honest when the cord is bent.
-    let mut last = n - 1;
-    while last > 1 && scene.point_in_plate(pts[last]) {
-        last -= 1;
-    }
-    let w = (1.7 * scene.scale).max(scene.card_h * 0.026);
-    for i in 0..last {
-        capsule(
-            cv,
-            pts[i].add(Vec2::new(1.3, 1.3)),
-            pts[i + 1].add(Vec2::new(1.3, 1.3)),
-            w * 1.6,
-            theme.cord_shadow,
-            1.05,
-        );
-    }
-    for i in 0..last {
-        capsule(cv, pts[i], pts[i + 1], w, theme.cord, 1.05);
-    }
-    for i in 0..last {
-        let o = Vec2::new(-w * 0.30, -w * 0.30);
-        capsule(
-            cv,
-            pts[i].add(o),
-            pts[i + 1].add(o),
-            w * 0.34,
-            theme.cord_lit,
-            1.05,
-        );
-    }
-
-    // 2. the mount: a clamp against the top of the screen, and the ring the cord runs through.
+/// The clamp against the top of the screen, and the ring the cord runs through.
+fn paint_mount(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
     let a = scene.anchor;
     box_shadow(
         cv,
@@ -414,8 +375,12 @@ pub fn paint(scene: &Scene, cv: &mut Canvas, theme: &Theme) {
         theme.mount,
     );
 
-    // 3. the plate. Rotated, so every evaluation goes through the inverse transform; that is what
-    // lets the same rounded-box distance serve a tilted object without a transformed render target.
+}
+
+/// The plate body: one rounded-box distance field, evaluated under the inverse
+/// rotation so a tilted object needs no transformed render target. Gradient, rim and
+/// shadow band fall out of the same signed distance and corner half-widths.
+fn paint_plate(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
     let c = scene.card_centre;
     let half = Vec2::new(scene.card_w * 0.5, scene.card_h * 0.5);
     let rot_extent =
@@ -486,6 +451,54 @@ pub fn paint(scene: &Scene, cv: &mut Canvas, theme: &Theme) {
         }
         cv.touch_row(y as i32, x0.max(0) as i32, x1.min(w_ - 1) as i32);
     }
+
+}
+
+pub fn paint(scene: &Scene, cv: &mut Canvas, theme: &Theme) {
+    cv.clear();
+    let n = scene.node_count as usize;
+    if n < 2 {
+        return;
+    }
+    let pts = &scene.nodes[..n];
+
+    // 1. the cord, cut where the plate covers it. Trimming by "inside the plate" rather than by a
+    // fixed inset is what keeps the joint honest when the cord is bent.
+    let mut last = n - 1;
+    while last > 1 && scene.point_in_plate(pts[last]) {
+        last -= 1;
+    }
+    let w = (1.7 * scene.scale).max(scene.card_h * 0.026);
+    for i in 0..last {
+        capsule(
+            cv,
+            pts[i].add(Vec2::new(1.3, 1.3)),
+            pts[i + 1].add(Vec2::new(1.3, 1.3)),
+            w * 1.6,
+            theme.cord_shadow,
+            1.05,
+        );
+    }
+    for i in 0..last {
+        capsule(cv, pts[i], pts[i + 1], w, theme.cord, 1.05);
+    }
+    for i in 0..last {
+        let o = Vec2::new(-w * 0.30, -w * 0.30);
+        capsule(
+            cv,
+            pts[i].add(o),
+            pts[i + 1].add(o),
+            w * 0.34,
+            theme.cord_lit,
+            1.05,
+        );
+    }
+
+    // 2. the mount.
+    paint_mount(cv, scene, theme);
+
+    // 3. the plate.
+    paint_plate(cv, scene, theme);
 
     // 4. digits, last so nothing can overprint them.
     draw_text(cv, scene, theme);

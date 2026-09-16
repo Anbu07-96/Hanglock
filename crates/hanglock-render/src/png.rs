@@ -31,9 +31,9 @@ fn adler32(data: &[u8]) -> u32 {
     (b << 16) | a
 }
 
-fn chunk(out: &mut Vec<u8>, tag: &[u8; 4], data: &[u8]) {
+fn chunk(out: &mut Vec<u8>, tag: [u8; 4], data: &[u8]) {
     out.extend_from_slice(&(data.len() as u32).to_be_bytes());
-    out.extend_from_slice(tag);
+    out.extend_from_slice(&tag);
     out.extend_from_slice(data);
     out.extend_from_slice(&crc32(&[tag.as_slice(), data].concat()).to_be_bytes());
 }
@@ -43,7 +43,7 @@ fn deflate_stored(data: &[u8]) -> Vec<u8> {
     let mut i = 0;
     loop {
         let n = (data.len() - i).min(0xFFFF);
-        let last = if i + n >= data.len() { 1 } else { 0 };
+        let last = u8::from(i + n >= data.len());
         out.push(last);
         out.extend_from_slice(&(n as u16).to_le_bytes());
         out.extend_from_slice(&(!(n as u16)).to_le_bytes());
@@ -94,11 +94,11 @@ pub fn encode(cv: &Canvas) -> Vec<u8> {
     }
     let mut out = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
     let mut ihdr = Vec::with_capacity(13);
-    ihdr.extend_from_slice(&(cv.w as u32).to_be_bytes());
-    ihdr.extend_from_slice(&(cv.h as u32).to_be_bytes());
+    ihdr.extend_from_slice(&cv.w.to_be_bytes());
+    ihdr.extend_from_slice(&cv.h.to_be_bytes());
     ihdr.extend_from_slice(&[8, 6, 0, 0, 0]); // 8-bit, truecolour+alpha
-    chunk(&mut out, b"IHDR", &ihdr);
-    chunk(&mut out, b"IDAT", &deflate_stored(&raw));
-    chunk(&mut out, b"IEND", b"");
+    chunk(&mut out, *b"IHDR", &ihdr);
+    chunk(&mut out, *b"IDAT", &deflate_stored(&raw));
+    chunk(&mut out, *b"IEND", b"");
     out
 }
