@@ -88,9 +88,23 @@ fn a_top_docked_taskbar_pushes_the_hang_line_down_when_respected() {
     mon.work = Rect::new(0.0, 48.0, 1920.0, 1080.0);
     let respected = place(&mon, &c, &card, 150.0, 1.0, 0.5, 16.0, true);
     let over = place(&mon, &c, &card, 150.0, 1.0, 0.5, 16.0, false);
+    // The hang line is the anchor, not the frame's top edge. The frame starts one top margin above
+    // the anchor, and is then clamped inside the display, so comparing `frame.y0` values measures
+    // that margin (39 px here) rather than the rule — which is why this assertion asked for 30 px
+    // of a difference the geometry cannot produce. Absolute anchor = frame origin + the anchor
+    // offset the painter is given, which is the y the cord actually hangs from.
+    let hang_respected = respected.frame.y0 + respected.anchor.y;
+    let hang_over = over.frame.y0 + over.anchor.y;
+    // Respecting the taskbar puts it on the work area, to the pixel: 48.
     assert!(
-        respected.frame.y0 > over.frame.y0 + 30.0,
-        "respect_taskbar did not move the hang line"
+        (hang_respected - 48.0).abs() < 1e-9,
+        "hang line at {hang_respected}, not the work-area top"
+    );
+    // Ignoring it leaves the cord's first 9 px behind the taskbar — the failure the option exists
+    // to prevent, and the reason `respect_taskbar` defaults to true.
+    assert!(
+        hang_over < 48.0,
+        "hang line at {hang_over} is not behind the taskbar"
     );
 }
 
@@ -103,7 +117,22 @@ fn an_overlay_wider_than_the_display_centres_instead_of_failing() {
         p.clipped,
         "must report that the sweep is clipped, for diagnostics"
     );
-    assert_eq!(p.frame.x0, 0.0);
+    // The rule in `place` is symmetric overflow, and this test is named for it. The assertion that
+    // used to sit here — `p.frame.x0 == 0.0` — is the clamped answer the rule deliberately rejects,
+    // so it asserted the opposite of the behaviour under test. Tolerance rather than exact equality
+    // because `frame` is built by adding and subtracting the same wide size, which costs an ulp.
+    let centre = p.frame.x0 + p.frame.w() * 0.5;
+    let display_centre = tiny.bounds.x0 + tiny.bounds.w() * 0.5;
+    assert!(
+        (centre - display_centre).abs() < 1e-6,
+        "the overlay is not centred on the display: {:?}",
+        p.frame
+    );
+    assert!(
+        p.frame.x0 < tiny.bounds.x0 && p.frame.x1 > tiny.bounds.x1,
+        "an overlay wider than the display must overflow both sides evenly: {:?}",
+        p.frame
+    );
     assert!(
         p.frame.w() > tiny.bounds.w(),
         "overflow is the answer, not a shrunk clock"

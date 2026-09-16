@@ -8,7 +8,7 @@
 //! all. If someone rewrites the integrator and this fails, the question is not "is the tolerance too
 //! tight" — it is "did you re-review the feel".
 //!
-//! `1e-6` px is the tolerance, not zero, because the reference computes `math.hypot` while the
+//! `1e-4` px is the tolerance, not zero, because the reference computes `math.hypot` while the
 //! hot path here uses `sqrt(x*x + y*y)`. That is a last-bit difference in one distance per link,
 //! amplified a little by the recursion; anything tighter would be testing the C library.
 
