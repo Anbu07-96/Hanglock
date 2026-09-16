@@ -41,6 +41,11 @@ fn solver_matches_the_reference_model() {
         .map(|s| s.parse().unwrap())
         .collect();
     let hang: f64 = expect_prefix("hang")[0].parse().unwrap();
+    let recorded_scale: f64 = expect_prefix("scale")[0].parse().unwrap();
+    assert!(
+        (recorded_scale - 1.0).abs() < 1e-12,
+        "the trace carries scale {recorded_scale}; this check rebuilds it at 1.0"
+    );
 
     let mut rope = Rope::new(
         RopeConfig::default(),
