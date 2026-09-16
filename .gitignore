@@ -1,0 +1,20 @@
+# Build artifacts
+/target
+/dist
+/**/*.rs.bk
+
+# Local, never committed
+/.env
+*.log
+/scratch
+assets/**/*.tmp
+
+# Editor / OS noise
+/.idea
+/.vs
+*.user
+Thumbs.db
+
+# Python tooling in tools/model (the reference model runs here; the product does not)
+__pycache__/
+*.pyc

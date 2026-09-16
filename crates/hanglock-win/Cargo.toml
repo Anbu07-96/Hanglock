@@ -1,0 +1,16 @@
+[package]
+name = "hanglock-win"
+description = "The Windows backend: the only crate that uses unsafe, and the only one that names a Windows API."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+hanglock-core = { path = "../hanglock-core" }
+hanglock-render = { path = "../hanglock-render" }
+hanglock-platform = { path = "../hanglock-platform" }
+
+[lints]
+workspace = true

@@ -1,0 +1,53 @@
+[workspace]
+resolver = "2"
+members = [
+    "apps/hanglock",
+    "crates/hanglock-core",
+    "crates/hanglock-render",
+    "crates/hanglock-platform",
+    "crates/hanglock-win",
+]
+
+# Zero third-party dependencies, deliberately: see docs/decisions/0002-zero-dependencies.md.
+# A clock that lives on the desktop all day should carry no supply chain, and every number in
+# docs/architecture.md's budgets is easier to hold when nothing else is in the binary.
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+license = "MIT"
+repository = "https://github.com/Anbu07-96/Hanglock"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+unused_unsafe = "deny"
+missing_debug_implementations = "allow"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
+cast_lossless = "allow"
+missing_errors_doc = "allow"
+must_use_candidate = "allow"
+similar_names = "allow"
+too_many_arguments = "allow"
+struct_excessive_bools = "allow"
+items_after_statements = "allow"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = 0
+
+# `bench` keeps symbols and debug info: it is the configuration the perf table in
+# docs/gate-a.md is measured in, exactly so that the numbers are attributable.
+[profile.bench]
+inherits = "release"
+strip = false
+debug = 1

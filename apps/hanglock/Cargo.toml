@@ -1,0 +1,23 @@
+[package]
+name = "hanglock"
+description = "A working clock hanging from the top of the desktop."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+hanglock-core = { path = "../../crates/hanglock-core" }
+hanglock-render = { path = "../../crates/hanglock-render" }
+hanglock-platform = { path = "../../crates/hanglock-platform" }
+
+[target.'cfg(windows)'.dependencies]
+hanglock-win = { path = "../../crates/hanglock-win" }
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "hanglock"
+path = "src/main.rs"

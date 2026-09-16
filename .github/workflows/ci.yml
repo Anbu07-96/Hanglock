@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # The model, the solver and the painter have no OS in them, so Linux runs the full suite. This is
+  # the job that catches a physics regression, and it costs nothing to keep.
+  core:
+    name: Model + painter (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.77.2
+        with:
+          components: rustfmt, clippy
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --workspace
+      - name: Golden trace is current
+        # Re-generate the reference trace and fail if the committed one has drifted from the model it
+        # is supposed to pin. Without this, `tests/golden/*.txt` silently becomes fiction.
+        run: |
+          python3 tools/model/gen_face.py > /tmp/face_data.rs
+          diff -u crates/hanglock-render/src/face_data.rs /tmp/face_data.rs
+      - name: Bench (informational)
+        run: cargo run --release -p hanglock -- --bench 300
+      - name: Asset provenance
+        # No artwork may enter the repo without a provenance line (docs/research/ip-boundaries.md).
+        # With no binary assets today, the check is that the set stays explained.
+        run: |
+          for f in $(find assets docs/previews -type f ! -name 'SOURCES.md' 2>/dev/null); do
+            base=$(basename "$f")
+            grep -q -- "$base" assets/SOURCES.md || { echo "::error::$f has no provenance line in assets/SOURCES.md"; exit 1; }
+          done
+          echo "asset provenance recorded for $(find assets docs/previews -type f ! -name SOURCES.md | wc -l) files"
+
+  windows:
+    name: Build + test (Windows ${{ matrix.arch }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64-pc-windows-msvc, aarch64-pc-windows-msvc]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.77.2
+        with:
+          targets: ${{ matrix.arch }}
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --target ${{ matrix.arch }} -- -D warnings
+      - name: Test
+        # The Win32 layer has no unit tests by policy (see docs/architecture.md §9); this runs the
+        # rest of the workspace on the real target and proves the unsafe crate *compiles* there.
+        run: cargo test --workspace --target ${{ matrix.arch }}
+      - name: Build release
+        run: cargo build --release --target ${{ matrix.arch }} -p hanglock
+      - name: Smoke: the binary runs headless on Windows
+        shell: pwsh
+        run: |
+          $exe = "target/${{ matrix.arch }}/release/hanglock.exe"
+          & $exe --diag | Tee-Object -FilePath diag.txt
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & $exe --bench 200 | Tee-Object -FilePath bench.txt -Append
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & $exe --dump-scene scene.png
+          if (-not (Test-Path scene.png)) { "::error::--dump-scene produced nothing"; exit 1 }
+      - name: Size gate
+        shell: pwsh
+        run: |
+          $exe = Get-Item "target/${{ matrix.arch }}/release/hanglock.exe"
+          $kb = [math]::Ceiling($exe.Length / 1KB)
+          Write-Host "hanglock.exe = $kb KB (budget 2048 KB)"
+          if ($kb -gt 2048) { "::error::executable is $kb KB, over the 2048 KB budget"; exit 1 }
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hanglock-${{ matrix.arch }}
+          path: |
+            target/${{ matrix.arch }}/release/hanglock.exe
+            diag.txt
+            bench.txt
+            scene.png
