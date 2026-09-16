@@ -23,12 +23,6 @@ fn rope() -> Rope {
     r
 }
 
-fn step(r: &mut Rope, frames: usize, dt: f64) {
-    for _ in 0..frames {
-        r.step(dt);
-    }
-}
-
 /// Two 120 Hz frames must equal one 60 Hz frame. This is what the fixed timestep is *for*: a display
 /// the user changes, a laptop that drops to 60 Hz to save power, and a 144 Hz monitor must all
 /// produce the same swing, not three of them.
@@ -238,7 +232,7 @@ fn a_settled_rope_sleeps_and_a_touched_one_wakes() {
     r.wake();
     assert!(!r.sleeping);
     r.step(1.0 / 60.0);
-    assert!(r.card_centre() != before || true);
+    assert!(r.card_centre() != before, "a woken rope must resume physics");
 }
 
 /// Sleep must land the object hanging straight, not frozen mid-swing. Without the brake the friction
@@ -254,7 +248,7 @@ fn it_sleeps_hanging_straight() {
     }
     assert!(r.sleeping);
     let off = (r.card_centre().x - r.anchor.x).abs();
-    assert!(off < 0.25, "settled {:.2} px off vertical", off);
+    assert!(off < 0.25, "settled {off:.2} px off vertical");
     assert!(
         r.att.theta.abs() < 5e-3,
         "settled tilted {} rad",

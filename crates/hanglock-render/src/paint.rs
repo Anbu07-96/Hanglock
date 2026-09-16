@@ -199,7 +199,7 @@ pub fn text_bounds(scene: &Scene, theme: &Theme) -> Rect {
         };
         let gx = ox + i as f64 * (cap * f64::from(ADVANCE) + cap * f64::from(TRACKING));
         for ln in g.lines {
-            for p in &ln {
+            for p in *ln {
                 let q = rot(
                     centre,
                     scene.theta,
@@ -211,7 +211,7 @@ pub fn text_bounds(scene: &Scene, theme: &Theme) -> Rect {
                 b[3] = b[3].max(q.y + rad);
             }
         }
-        for d in &g.dots {
+        for d in g.dots {
             let q = rot(
                 centre,
                 scene.theta,
@@ -232,7 +232,7 @@ pub fn text_bounds(scene: &Scene, theme: &Theme) -> Rect {
             };
             let gx = sox + i as f64 * (scap * f64::from(ADVANCE) + scap * 0.16);
             for ln in g.lines {
-                for p in &ln {
+                for p in *ln {
                     let q = rot(
                         centre,
                         scene.theta,
@@ -292,7 +292,7 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
                 capsule(cv, a, b, rad, theme.ink, 1.05);
             }
         }
-        for d in &g.dots {
+        for d in g.dots {
             let p = rot(
                 centre,
                 scene.theta,
@@ -374,7 +374,6 @@ fn paint_mount(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
         1.25 * scene.scale,
         theme.mount,
     );
-
 }
 
 /// The plate body: one rounded-box distance field, evaluated under the inverse
@@ -451,7 +450,6 @@ fn paint_plate(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
         }
         cv.touch_row(y as i32, x0.max(0) as i32, x1.min(w_ - 1) as i32);
     }
-
 }
 
 pub fn paint(scene: &Scene, cv: &mut Canvas, theme: &Theme) {
