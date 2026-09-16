@@ -272,7 +272,7 @@ pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
     let f = cfg.frame;
     let hwnd = match unsafe { spawn_window::<A>(instance, cfg) } {
         Ok(h) => h,
-        Err(code) => return code,
+        Err(code) => return i32::from(code),
     };
     rt.host.hwnd = hwnd;
     unsafe {
