@@ -178,9 +178,8 @@ pub fn place(
 pub fn pick_monitor<'a>(mons: &[&'a Monitor], wanted: u32, primary: u32) -> &'a Monitor {
     mons.iter().copied().find(|m| m.index == wanted).unwrap_or_else(|| {
         mons.iter()
-            .copied()
             .find(|m| m.index == primary)
-            .or(mons.first().copied())
+            .or(mons.first())
             .copied()
             .unwrap_or(&DEFAULT_MONITOR)
     })
