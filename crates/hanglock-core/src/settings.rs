@@ -193,7 +193,7 @@ impl Settings {
                 ("", "schema") => out.schema = int_of(value, i64::from(out.schema)).max(1) as u32,
                 ("overlay", "enabled") => out.overlay.enabled = bool_of(value),
                 ("overlay", "monitor_index") => {
-                    out.overlay.monitor_index = int_of(value, 0).max(0) as u32
+                    out.overlay.monitor_index = int_of(value, 0).max(0) as u32;
                 }
                 ("overlay", "anchor_ratio") => out.overlay.anchor_ratio = float_of(value, 0.5),
                 ("overlay", "hang") => out.overlay.hang = float_of(value, 150.0),
