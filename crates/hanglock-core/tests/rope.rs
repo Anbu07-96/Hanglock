@@ -232,7 +232,10 @@ fn a_settled_rope_sleeps_and_a_touched_one_wakes() {
     r.wake();
     assert!(!r.sleeping);
     r.step(1.0 / 60.0);
-    assert!(r.card_centre() != before, "a woken rope must resume physics");
+    assert!(
+        r.card_centre() != before,
+        "a woken rope must resume physics"
+    );
 }
 
 /// Sleep must land the object hanging straight, not frozen mid-swing. Without the brake the friction

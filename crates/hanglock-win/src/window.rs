@@ -279,7 +279,7 @@ pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
     }
     rt.host.show(true);
     unsafe {
-        rt.host.call_on_ready(me);
+        rt.app.on_ready(&mut rt.host);
         rt.host.sync_tick_timer();
     }
 
@@ -616,13 +616,11 @@ unsafe extern "system" fn wndproc<A: AppHook + 'static>(
             host.captured = false;
             let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
             let f = host.frame;
-            let dt = host.elapsed();
             app.on_input(
                 host,
                 Input::Release {
                     at: Vec2::new(x - f.x0, y - f.y0),
                     vel: Vec2::ZERO,
-                    dt,
                 },
             );
             0

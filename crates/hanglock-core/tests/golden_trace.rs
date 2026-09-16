@@ -32,7 +32,7 @@ fn solver_matches_the_reference_model() {
         assert!(l.starts_with(want), "expected {want}, got {l}");
         l.split_whitespace()
             .skip(1)
-            .map(|s| s.to_string())
+            .map(ToString::to_string)
             .collect()
     };
     let seg = expect_prefix("segments")[0].parse::<usize>().unwrap();
@@ -74,7 +74,8 @@ fn solver_matches_the_reference_model() {
                 Vec2::new(rope.anchor.x + 7.0 * i as f64, rope.anchor.y + 140.0),
                 Vec2::new(420.0, 0.0),
             );
-        } else if i == 20 {
+        }
+        if i == 20 {
             rope.end_drag();
         }
         rope.step(1.0 / 60.0);
@@ -85,7 +86,7 @@ fn solver_matches_the_reference_model() {
         let toks: Vec<&str> = line.split_whitespace().collect();
         assert_eq!(toks[0], "F");
         assert_eq!(toks[1].parse::<usize>().unwrap(), i);
-        for n in 0..seg + 1 {
+        for n in 0..=seg {
             let x: f64 = toks[2 + n * 2].parse().unwrap();
             let y: f64 = toks[3 + n * 2].parse().unwrap();
             let d = rope.nodes[n].pos.dist(Vec2::new(x, y));

@@ -8,8 +8,6 @@
 //! and a settings toggle that lies about what the system is doing is worse than no toggle. So the
 //! query runs at startup and again whenever the setting is written.
 
-use crate::sys;
-
 const RUN_KEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const VALUE: &str = "Hanglock";
 

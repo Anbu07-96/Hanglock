@@ -147,7 +147,7 @@ pub const ULW_EX_NORESIZE: DWORD = 8;
 /// layered window: `UpdateLayeredWindow` itself takes no update rectangle, so the sub-rect present
 /// that keeps a settled clock cheap goes through this struct.
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct UPDATELAYEREDWINDOWINFO {
     pub cb_size: DWORD,
     pub pt_dst: *const POINT,
@@ -161,6 +161,14 @@ pub struct UPDATELAYEREDWINDOWINFO {
     pub prc_dirty: *const WINRECT,
 }
 const _: [(); 72] = [(); size_of::<UPDATELAYEREDWINDOWINFO>()];
+impl Default for UPDATELAYEREDWINDOWINFO {
+    fn default() -> Self {
+        // SAFETY: every field is an integer or a pointer, and the all-zero bit pattern is a
+        // valid value of each — the standard initial state for these Win32 structures.
+        unsafe { core::mem::zeroed() }
+    }
+}
+
 pub const AC_SRC_OVER: BYTE = 0;
 pub const AC_SRC_ALPHA: BYTE = 1;
 pub const BI_RGB: DWORD = 0;
@@ -193,7 +201,7 @@ pub struct WINRECT {
 const _: [(); 16] = [(); size_of::<WINRECT>()];
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct MSG {
     pub hwnd: HWND,
     pub message: UINT,
@@ -201,6 +209,14 @@ pub struct MSG {
     pub lparam: LPARAM,
     pub time: DWORD,
     pub pt: POINT,
+}
+
+impl Default for MSG {
+    fn default() -> Self {
+        // SAFETY: every field is an integer or a pointer, and the all-zero bit pattern is a
+        // valid value of each — the standard initial state for these Win32 structures.
+        unsafe { core::mem::zeroed() }
+    }
 }
 const _: [(); 48] = [(); size_of::<MSG>()];
 
@@ -250,7 +266,7 @@ pub struct BITMAPINFO {
 const _: [(); 44] = [(); size_of::<BITMAPINFO>()];
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct WNDCLASSEXW {
     pub cb_size: UINT,
     pub style: UINT,
@@ -266,6 +282,14 @@ pub struct WNDCLASSEXW {
     pub h_icon_sm: HICON,
 }
 const _: [(); 80] = [(); size_of::<WNDCLASSEXW>()];
+impl Default for WNDCLASSEXW {
+    fn default() -> Self {
+        // SAFETY: every field is an integer or a pointer, and the all-zero bit pattern is a
+        // valid value of each — the standard initial state for these Win32 structures.
+        unsafe { core::mem::zeroed() }
+    }
+}
+
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -279,7 +303,7 @@ const _: [(); 40] = [(); size_of::<MONITORINFO>()];
 
 /// The taskbar's edge and state, for `ABM_GETTASKBARPOS` / `ABM_GETSTATE`.
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct APPBARDATA {
     pub cb_size: UINT,
     pub hwnd: HWND,
@@ -288,7 +312,15 @@ pub struct APPBARDATA {
     pub rc: WINRECT,
     pub l_param: LONG_PTR,
 }
-const _: [(); 56] = [(); size_of::<APPBARDATA>()];
+const _: [(); 48] = [(); size_of::<APPBARDATA>()];
+impl Default for APPBARDATA {
+    fn default() -> Self {
+        // SAFETY: every field is an integer or a pointer, and the all-zero bit pattern is a
+        // valid value of each — the standard initial state for these Win32 structures.
+        unsafe { core::mem::zeroed() }
+    }
+}
+
 pub const ABM_GETTASKBARPOS: DWORD = 0x0005;
 pub const ABM_GETSTATE: DWORD = 0x0004;
 pub const ABS_AUTOHIDE: DWORD = 0x0001;
