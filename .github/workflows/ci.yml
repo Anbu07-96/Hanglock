@@ -69,7 +69,7 @@ jobs:
         run: cargo test --workspace --target ${{ matrix.arch }}
       - name: Build release
         run: cargo build --release --target ${{ matrix.arch }} -p hanglock
-      - name: Smoke: the binary runs headless on Windows
+      - name: "Smoke: the binary runs headless on Windows"
         shell: pwsh
         run: |
           $exe = "target/${{ matrix.arch }}/release/hanglock.exe"
