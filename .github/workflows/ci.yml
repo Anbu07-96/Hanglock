@@ -29,7 +29,9 @@ jobs:
       - name: Format
         run: |
           cargo fmt --all -- --check > fmt.diff 2>&1 || {
+            grep -o '^Diff in [^:]*' fmt.diff | sort -u | while read -r f; do echo "::error file=$f::not rustfmt-clean"; done
             { echo '<h3>cargo fmt --all -- --check</h3>'; echo '```diff'; tail -n 500 fmt.diff; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            head -n 60 fmt.diff
             exit 1; }
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
@@ -69,6 +71,9 @@ jobs:
         run: |
           cargo clippy --workspace --all-targets --target ${{ matrix.arch }} -- -D warnings > clippy.log 2>&1
           if ($LASTEXITCODE -ne 0) {
+            $errs = Get-Content clippy.log | Select-String -Pattern '^error' | Select-Object -First 14 | ForEach-Object { "::error::" + $_.Line }
+            if (-not $errs) { $errs = Get-Content clippy.log -Tail 14 | ForEach-Object { "::error::" + $_ } }
+            $errs
             { '<h3>cargo clippy --target ${{ matrix.arch }} (tail)</h3>'; '```text'; Get-Content clippy.log -Tail 300; '```' } | Add-Content $env:GITHUB_STEP_SUMMARY
             exit 1
           }
