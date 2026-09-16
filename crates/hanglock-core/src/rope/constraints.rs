@@ -59,11 +59,7 @@ pub fn relax(nodes: &mut [Node], rest_len: f64, cfg: &RopeConfig, held: Option<u
             // Reference exit criterion: max over CORRECTION COMPONENTS, not vector norms —
             // norms are sqrt(2)x larger on diagonal links, and the pass budget they leave behind
             // is worth thousandths of a pixel on the frames that need every pass.
-            let moved = ca
-                .x
-                .abs()
-                .max(ca.y.abs())
-                .max(cb.x.abs().max(cb.y.abs()));
+            let moved = ca.x.abs().max(ca.y.abs()).max(cb.x.abs().max(cb.y.abs()));
             if moved > worst {
                 worst = moved;
             }
