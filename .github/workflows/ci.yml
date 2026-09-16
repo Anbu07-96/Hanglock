@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # arena/** while Phase 1 lives only on the Arena branch; drop it once main carries the file.
+    branches: [main, 'arena/**']
   pull_request:
   workflow_dispatch:
 
