@@ -27,7 +27,10 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Format
-        run: cargo fmt --all -- --check
+        run: |
+          cargo fmt --all -- --check > fmt.diff 2>&1 || {
+            { echo '<h3>cargo fmt --all -- --check</h3>'; echo '```diff'; tail -n 500 fmt.diff; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1; }
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
@@ -63,7 +66,12 @@ jobs:
         with:
           targets: ${{ matrix.arch }}
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --target ${{ matrix.arch }} -- -D warnings
+        run: |
+          cargo clippy --workspace --all-targets --target ${{ matrix.arch }} -- -D warnings > clippy.log 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            { '<h3>cargo clippy --target ${{ matrix.arch }} (tail)</h3>'; '```text'; Get-Content clippy.log -Tail 300; '```' } | Add-Content $env:GITHUB_STEP_SUMMARY
+            exit 1
+          }
       - name: Test
         # The Win32 layer has no unit tests by policy (see docs/architecture.md §9); this runs the
         # rest of the workspace on the real target and proves the unsafe crate *compiles* there.
