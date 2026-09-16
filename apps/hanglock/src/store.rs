@@ -23,10 +23,7 @@ pub fn dir() -> PathBuf {
         .map_or_else(
             || {
                 std::env::var_os("HOME")
-                    .map_or_else(
-                        || PathBuf::from("."),
-                        |h| PathBuf::from(h).join(".config"),
-                    )
+                    .map_or_else(|| PathBuf::from("."), |h| PathBuf::from(h).join(".config"))
             },
             PathBuf::from,
         );
@@ -119,7 +116,7 @@ fn write_and_replace(
             return Ok(());
         }
     }
-    if let Err(e) = std::fs::rename(tmp, p) {
+    if std::fs::rename(tmp, p).is_err() {
         // On Windows a rename onto an existing path fails; drop it first. Losing the *old* file to
         // a failure in the gap is bounded by the fact that `tmp` was written and verified above.
         let _ = std::fs::remove_file(p);

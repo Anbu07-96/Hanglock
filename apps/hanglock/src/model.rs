@@ -185,6 +185,14 @@ impl Model {
         }
     }
 
+    /// True while a ring drag is moving the whole clock. Test-facing: the release path decides
+    /// from `reposition` directly, and the tests use this to watch that state machine.
+    #[cfg(test)]
+    #[must_use]
+    pub fn is_repositioning(&self) -> bool {
+        self.reposition.is_some()
+    }
+
     /// Recompute where the overlay goes from the current monitor list. Returns the frame the
     /// adapter must apply, in device px.
     pub fn relayout(&mut self, monitors: &[Monitor], primary: u32) -> Rect {
@@ -836,10 +844,7 @@ mod tests {
                 break;
             }
         }
-        assert!(
-            !m.wants_ticks(),
-            "the app never stopped asking for frames"
-        );
+        assert!(!m.wants_ticks(), "the app never stopped asking for frames");
         assert!(
             actions_with_motion < 400,
             "too many presented frames while settling: {actions_with_motion}"
