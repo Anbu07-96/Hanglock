@@ -1,42 +1,22 @@
 #!/usr/bin/env python3
-"""Publish a captured command log as GitHub Actions annotations, in chunks.
+"""Publish a captured command log losslessly through check-run annotations.
 
-The runner raw logs live on hosts the analysis environment cannot reach, and a single
-check-run annotation message is capped at ~4 KB, so a whole failure log has no other
-channel that survives. This splits the captured output into line-packed chunks of
-under 3.6 KB, each emitted as its own ::error:: line, and appends a tail chunk when
-the log was too long to cover entirely — head chunks catch the first diagnostics,
-the tail catches the cargo "could not compile" summary.
+Constraints this routes around: both raw-log hosts are unreachable from the analysis
+environment, step summaries never surface via the API, GitHub silently drops
+annotations beyond a small per-run count, and one annotation message caps at ~4 KB.
+So the log is gzip-compressed, base64-encoded, and emitted as at most nine [i/n]
+chunk annotations — a whole rustfmt diff or cargo session fits in six and survives
+byte-exact. `git`-style decoding on the other side: join parts, b64decode, gunzip.
 
 Usage: emit.py <title> <logfile>
 """
+import base64
+import gzip
 import pathlib
 import sys
 
-CAP = 3600
-MAX_PARTS = 12
-
-
-def escape(text: str) -> str:
-    # Workflow-command escaping, % first because it introduces the other escapes.
-    return text.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
-
-
-def pack(lines):
-    parts, buf = [], ""
-    for line in lines:
-        while len(line) > CAP:  # pathological single line: hard-split
-            parts.append(buf + line[:CAP])
-            buf = ""
-            line = line[CAP:]
-        ln = line + "\n"
-        if len(buf) + len(ln) > CAP and buf:
-            parts.append(buf)
-            buf = ""
-        buf += ln
-    if buf:
-        parts.append(buf)
-    return parts
+CAP = 3400
+MAX_PARTS = 9
 
 
 def main() -> None:
@@ -47,14 +27,15 @@ def main() -> None:
         text = "<missing log file: %s>" % log_path
     if not text.strip():
         text = "<empty log>"
-    lines = text.splitlines()
-    parts = pack(lines)
-    shown = min(len(parts), MAX_PARTS)
-    for i, part in enumerate(parts[:shown], 1):
-        suffix = " [%d/%d]" % (i, shown) if shown > 1 else ""
-        print("::error title=%s%s::%s" % (title.replace(",", " "), suffix, escape(part)))
-    if len(parts) > shown:
-        print("::error title=%s tail::%s" % (title.replace(",", " "), escape("\n".join(lines[-60:]))))
+    safe_title = title.replace(",", " ").replace(":", " ")
+    b64 = base64.b64encode(gzip.compress(text.encode("utf-8", "replace"), 9)).decode()
+    parts = [b64[i:i + CAP] for i in range(0, len(b64), CAP)]
+    truncated = len(parts) > MAX_PARTS
+    for i, part in enumerate(parts[:MAX_PARTS], 1):
+        print("::error title=%s gz %d/%d::%s" % (safe_title, i, len(parts), part))
+    if truncated:
+        print("::error title=%s TRUNCATED::dropped %d of %d chunks (%d raw bytes)"
+              % (safe_title, len(parts) - MAX_PARTS, len(parts), len(text)))
 
 
 main()
