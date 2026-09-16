@@ -27,24 +27,22 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Format
-        run: |
-          cargo fmt --all -- --check > fmt.diff 2>&1 || {
-            grep -o '^Diff in [^:]*' fmt.diff | sort -u | while read -r f; do echo "::error file=$f::not rustfmt-clean"; done
-            { echo '<h3>cargo fmt --all -- --check</h3>'; echo '```diff'; tail -n 500 fmt.diff; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-            head -n 60 fmt.diff
-            exit 1; }
+        run: tools/ci/run-and-annotate.sh cargo_fmt fmt.diff -- cargo fmt --all -- --check
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: tools/ci/run-and-annotate.sh cargo_clippy clippy.log -- cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
-        run: cargo test --workspace
+        run: tools/ci/run-and-annotate.sh cargo_test test.log -- cargo test --workspace
       - name: Golden trace is current
         # Re-generate the reference trace and fail if the committed one has drifted from the model it
         # is supposed to pin. Without this, `tests/golden/*.txt` silently becomes fiction.
         run: |
           python3 tools/model/gen_face.py > /tmp/face_data.rs
-          diff -u crates/hanglock-render/src/face_data.rs /tmp/face_data.rs
+          diff -u crates/hanglock-render/src/face_data.rs /tmp/face_data.rs > golden.diff 2>&1 || {
+            cat golden.diff
+            python3 tools/ci/emit.py face_data_drift golden.diff
+            exit 1; }
       - name: Bench (informational)
-        run: cargo run --release -p hanglock -- --bench 300
+        run: tools/ci/run-and-annotate.sh bench_300 bench.log -- cargo run --release -p hanglock -- --bench 300
       - name: Asset provenance
         # No artwork may enter the repo without a provenance line (docs/research/ip-boundaries.md).
         # With no binary assets today, the check is that the set stays explained.
@@ -69,20 +67,30 @@ jobs:
           targets: ${{ matrix.arch }}
       - name: Clippy
         run: |
-          cargo clippy --workspace --all-targets --target ${{ matrix.arch }} -- -D warnings > clippy.log 2>&1
+          cargo clippy --workspace --all-targets --target ${{ matrix.arch }} -- -D warnings *> clippy.log
           if ($LASTEXITCODE -ne 0) {
-            $errs = Get-Content clippy.log | Select-String -Pattern '^error' | Select-Object -First 14 | ForEach-Object { "::error::" + $_.Line }
-            if (-not $errs) { $errs = Get-Content clippy.log -Tail 14 | ForEach-Object { "::error::" + $_ } }
-            $errs
-            { '<h3>cargo clippy --target ${{ matrix.arch }} (tail)</h3>'; '```text'; Get-Content clippy.log -Tail 300; '```' } | Add-Content $env:GITHUB_STEP_SUMMARY
+            Get-Content clippy.log
+            python tools/ci/emit.py "clippy ${{ matrix.arch }}" clippy.log
             exit 1
           }
       - name: Test
         # The Win32 layer has no unit tests by policy (see docs/architecture.md §9); this runs the
         # rest of the workspace on the real target and proves the unsafe crate *compiles* there.
-        run: cargo test --workspace --target ${{ matrix.arch }}
+        run: |
+          cargo test --workspace --target ${{ matrix.arch }} *> test.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content test.log
+            python tools/ci/emit.py "test ${{ matrix.arch }}" test.log
+            exit 1
+          }
       - name: Build release
-        run: cargo build --release --target ${{ matrix.arch }} -p hanglock
+        run: |
+          cargo build --release --target ${{ matrix.arch }} -p hanglock *> build.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content build.log
+            python tools/ci/emit.py "build ${{ matrix.arch }}" build.log
+            exit 1
+          }
       - name: "Smoke: the binary runs headless on Windows"
         shell: pwsh
         run: |
