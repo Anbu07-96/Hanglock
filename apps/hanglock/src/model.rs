@@ -157,7 +157,7 @@ impl Model {
         let rope = Rope::new(
             hanglock_core::rope::config::RopeConfig::default(),
             card,
-            posture_of(settings),
+            posture_of(&settings),
             Vec2::new(0.0, 0.0),
             1.0,
         );
@@ -360,9 +360,8 @@ impl Model {
                     }
                 }
             }
-            Input::Release { at, mut vel, dt } => {
+            Input::Release { at, mut vel } => {
                 let _ = at;
-                let _ = dt;
                 if let Some((_, _)) = self.reposition.take() {
                     out.push(Action::Save);
                     out.push(Action::Relayout);
@@ -1033,7 +1032,6 @@ mod tests {
         m.on_input(Input::Release {
             at: Vec2::new(a.x + 300.0, a.y),
             vel: Vec2::ZERO,
-            dt: 1.0 / 60.0,
         });
         assert!(
             (m.settings.overlay.anchor_ratio - ratio).abs() < 1e-9,
