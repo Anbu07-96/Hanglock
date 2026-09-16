@@ -209,7 +209,7 @@ in-crate. **None have been executed here.**
 | | |
 |---|---|
 | Branch | `arena/01a0a5bc-hanglock` |
-| Commit | one squashed commit on the branch, *"feat: the first runnable Hanglock prototype, and the plan it came from"*, on top of `3d2fcb4`, with its own hash `eb56591` |
+| Commit | one squashed commit on the branch, *"feat: the first runnable Hanglock prototype, and the plan it came from"*, on top of `3d2fcb4`; its own hash cannot be written inside itself, so: `git log -1 --format='%h %s' arena/01a0a5bc-hanglock` |
 | Tree | 78 files added/changed, working tree clean |
 | Push | **failed** — `fatal: could not read Username for 'https://github.com'`: the GitHub token Arena injects for this session is expired, so `git push` and `gh` cannot authenticate. Same failure as Phase 0. Fix: reconnect GitHub in Arena, then `git push origin arena/01a0a5bc-hanglock`. Nothing has been pushed to `main`; the repo's only remote branch remains `3d2fcb4`. |
 
