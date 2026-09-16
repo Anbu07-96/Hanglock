@@ -32,7 +32,9 @@ pub fn effective_inv_mass(nodes: &[Node], i: usize, held: Option<usize>) -> f64 
 pub fn relax(nodes: &mut [Node], rest_len: f64, cfg: &RopeConfig, held: Option<usize>) -> f64 {
     let mut largest = f64::INFINITY;
     let links = nodes.len() - 1;
-    for _ in 0..cfg.relax_cap.saturating_mul(links.max(1)) {
+    // Budget per NODE, matching the reference (`RELAX_CAP * (SEGMENTS + 1)`): links-vs-nodes
+    // differed by one pass per segment and starved convergence in the worst frames.
+    for _ in 0..cfg.relax_cap.saturating_mul(nodes.len()) {
         let mut worst = 0.0_f64;
         for i in 0..links {
             let ia = effective_inv_mass(nodes, i, held);
