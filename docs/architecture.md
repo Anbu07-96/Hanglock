@@ -28,7 +28,7 @@ Hanglock/
 ├── Cargo.toml                  # workspace
 ├── rust-toolchain.toml         # pinned, so CI and strangers agree
 ├── crates/
-│   ├── hanglock-core/          # `#![forbid(unsafe_code)]` — pure model, zero deps beyond serde
+│   ├── hanglock-core/          # `#![forbid(unsafe_code)]` — pure model, no dependencies at all
 │   │   src/
 │   │   │   ├── lib.rs
 │   │   │   ├── rope/
@@ -235,9 +235,10 @@ legibility = "sign"        # natural | sign | locked
 
 Rules (each one exists because someone will hit it):
 
-* Every field has a `#[serde(default = "…")]`; **missing keys must never reset a preference**, so
-  adding a field is always safe. Unknown keys ignored, so a newer build's file still loads on an
-  older one.
+* `Settings::from_toml` defaults every field it does not see; **missing keys must never reset a
+  preference**, so adding a field is always safe. Unknown keys are ignored, so a newer build's file still
+  loads on an older one. (The ADR-0001 draft said `#[serde(default = "…")]`; ADR-0002 made the reader and
+  writer ours, and the rule is the same one, implemented by hand.)
 * Numeric fields are clamped on the way in by the same `Limits` consts the UI uses — a corrupt or
   hand-edited file yields a sane overlay, not an off-screen one.
 * A file that fails to parse is renamed `settings.toml.corrupt-<ts>`, defaults are used, and the
