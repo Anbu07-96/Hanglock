@@ -195,7 +195,10 @@ impl Rope {
             1.0
         };
         let carried: Vec<Vec2> = if rebuild {
-            self.nodes.iter().map(|n| n.displacement().scale(growth)).collect()
+            self.nodes
+                .iter()
+                .map(|n| n.displacement().scale(growth))
+                .collect()
         } else {
             Vec::new()
         };
