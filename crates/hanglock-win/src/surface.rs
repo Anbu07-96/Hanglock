@@ -4,7 +4,7 @@
 //! no device to create and no `DEVICE_REMOVED` to recover from at 60 Hz, and because it makes
 //! "present nothing unless something changed" the trivial case rather than a synchronisation
 //! problem. `docs/gate-a.md` carries the measurement; if the per-present copy ever shows up as the
-//! bottleneck, a DirectComposition path replaces *this file only*, behind the two methods below.
+//! bottleneck, a `DirectComposition` path replaces *this file only*, behind the two methods below.
 
 use crate::sys;
 use hanglock_core::placement::Rect;
@@ -90,7 +90,7 @@ impl Surface {
             self.dc = dc;
             self.bitmap = bmp;
             self.old = sys::SelectObject(dc, bmp);
-            self.bits = bits as *mut u8;
+            self.bits = bits.cast::<u8>();
             // A fresh DIB is zeroed by GDI on some drivers and not on others; transparent-black is
             // also what a cleared layered window should be, so make it explicit.
             std::ptr::write_bytes(self.bits, 0, (w as usize) * (h as usize) * 4);
@@ -100,10 +100,14 @@ impl Surface {
 
     /// Copy `rect` (or everything) from the painter's buffer into the DIB and update the window.
     ///
+    /// # Safety
+    /// `hwnd` is handed to `UpdateLayeredWindowIndirect`/`UpdateLayeredWindow`, which dereference
+    /// it; it must be a live layered window.
+    ///
     /// The rect is not decoration: presenting only the digits' box each second is the difference
     /// between a settled clock copying ~20 KB per second and copying the whole surface ~60 times a
     /// second, and the reference project's measurements say the copy is what costs, not the drawing.
-    pub fn present(&mut self, hwnd: sys::HWND, src: &[u8], rect: Option<Rect>) -> bool {
+    pub unsafe fn present(&mut self, hwnd: sys::HWND, src: &[u8], rect: Option<Rect>) -> bool {
         if !self.valid || self.bits.is_null() {
             return false;
         }
@@ -206,5 +210,12 @@ impl Surface {
 impl Drop for Surface {
     fn drop(&mut self) {
         self.destroy();
+    }
+}
+
+impl Default for Surface {
+    /// All-null handles; the surface becomes real on the first `resize`.
+    fn default() -> Self {
+        Self::new()
     }
 }

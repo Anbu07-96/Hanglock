@@ -41,7 +41,7 @@ impl Tray {
     pub fn new(hwnd: sys::HWND, instance: sys::HMODULE) -> Self {
         Self {
             uid: 1,
-            hicon: icon::create(instance),
+            hicon: unsafe { icon::create(instance) },
             added: false,
             tooltip: sys::wide("Hanglock"),
             hwnd,

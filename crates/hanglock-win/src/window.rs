@@ -131,7 +131,6 @@ pub trait AppHook {
 /// The environment handed back to the hook: the window, the surface, the tray, the clock.
 pub struct Host {
     hwnd: sys::HWND,
-    instance: sys::HMODULE,
     surface: Surface,
     /// Monotonic delta source for the physics. `GetTickCount` steps on a 10-16 ms quantum, which a
     /// 240 Hz accumulator would notice as judder in the swing; nothing else here needs a clock, so
@@ -147,7 +146,6 @@ pub struct Host {
     visible: bool,
     rate_hz: u32,
     tick_ms: u32,
-    last_present_ms: u64,
     last_cursor: sys::POINT,
     /// True while the left button is held and captured, so a drag that leaves the window keeps
     /// arriving — which it must, because the pointer can outrun the swept box mid-throw and an
@@ -156,6 +154,7 @@ pub struct Host {
     exit: i32,
 }
 
+#[derive(Clone, Copy)]
 pub struct OverlayConfig {
     /// Initial size, device px. `on_ready` normally replaces it with a `place()`-derived rect.
     pub frame: Rect,
@@ -182,67 +181,45 @@ struct Runtime<A> {
     host: Host,
 }
 
-/// Create the overlay, wire it to `app`, and run the message loop. Returns the process exit code.
-pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
-    // Must happen before any window is created: after the first window exists the process's DPI
-    // context is fixed, and setting it later silently succeeds while changing nothing.
+/// Register the class and create the layered window. `Err(2)`/`Err(3)` are the process exit
+/// codes this contract reserves for class- and window-creation failure, kept distinct.
+///
+/// # Safety
+/// `instance` must be a live module handle for this process — `GetModuleHandleW(null)` gives
+/// one, and the class name and window procedure are ours.
+unsafe fn spawn_window<A: AppHook + 'static>(
+    instance: sys::HMODULE,
+    cfg: OverlayConfig,
+) -> Result<sys::HWND, u8> {
+    // SAFETY: caller's contract — a live instance handle for this process.
     unsafe {
-        sys::apply_dpi_awareness();
-    }
-    let instance = unsafe { sys::GetModuleHandleW(std::ptr::null()) };
-    let mut rt = Runtime {
-        app,
-        host: Host {
-            hwnd: std::ptr::null_mut(),
-            instance,
-            surface: Surface::new(),
-            clock: crate::time::PerfClock::new(),
-            tray: None,
-            frame: cfg.frame,
-            scale: cfg.scale.max(0.25),
-            topmost: cfg.topmost,
-            ignore_input: false,
-            visible: false,
-            rate_hz: 0,
-            tick_ms: 0,
-            last_present_ms: 0,
-            last_cursor: sys::POINT { x: 0, y: 0 },
-            captured: false,
-            exit: 0,
-        },
-    };
-    let me: *mut Runtime<A> = &mut rt;
-
-    let class = sys::wide(CLASS_NAME);
-    let wc = sys::WNDCLASSEXW {
-        cb_size: std::mem::size_of::<sys::WNDCLASSEXW>() as u32,
-        // CS_HREDRAW|CS_VREDRAW would force a full invalidate on resize; a layered window has no
-        // paint cycle to invalidate, so no class styles at all.
-        style: 0,
-        lpfn_wnd_proc: Some(wndproc::<A>),
-        cb_cls_extra: 0,
-        cb_wnd_extra: 0,
-        h_instance: instance,
-        h_icon: std::ptr::null_mut(),
-        h_cursor: std::ptr::null_mut(),
-        h_br_background: std::ptr::null_mut(),
-        lpsz_menu_name: std::ptr::null(),
-        lpsz_class_name: class.as_ptr(),
-        h_icon_sm: std::ptr::null_mut(),
-    };
-    let registered = unsafe { sys::RegisterClassExW(&wc) };
-    if registered == 0 {
-        return 2;
-    }
-
-    let title = sys::wide(cfg.title);
-    let ex = sys::WS_EX_LAYERED
-        | sys::WS_EX_TOOLWINDOW
-        | sys::WS_EX_NOACTIVATE
-        | if cfg.topmost { sys::WS_EX_TOPMOST } else { 0 };
-    let f = cfg.frame;
-    let hwnd = unsafe {
-        sys::CreateWindowExW(
+        let class = sys::wide(CLASS_NAME);
+        let wc = sys::WNDCLASSEXW {
+            cb_size: std::mem::size_of::<sys::WNDCLASSEXW>() as u32,
+            // CS_HREDRAW|CS_VREDRAW would force a full invalidate on resize; a layered window
+            // has no paint cycle to invalidate, so no class styles at all.
+            style: 0,
+            lpfn_wnd_proc: Some(wndproc::<A>),
+            cb_cls_extra: 0,
+            cb_wnd_extra: 0,
+            h_instance: instance,
+            h_icon: std::ptr::null_mut(),
+            h_cursor: std::ptr::null_mut(),
+            h_br_background: std::ptr::null_mut(),
+            lpsz_menu_name: std::ptr::null(),
+            lpsz_class_name: class.as_ptr(),
+            h_icon_sm: std::ptr::null_mut(),
+        };
+        if sys::RegisterClassExW(&wc) == 0 {
+            return Err(2);
+        }
+        let title = sys::wide(cfg.title);
+        let ex = sys::WS_EX_LAYERED
+            | sys::WS_EX_TOOLWINDOW
+            | sys::WS_EX_NOACTIVATE
+            | if cfg.topmost { sys::WS_EX_TOPMOST } else { 0 };
+        let f = cfg.frame;
+        let hwnd = sys::CreateWindowExW(
             ex,
             class.as_ptr(),
             title.as_ptr(),
@@ -255,11 +232,48 @@ pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
             std::ptr::null_mut(),
             instance,
             std::ptr::null(),
-        )
-    };
-    if hwnd.is_null() {
-        return 3;
+        );
+        if hwnd.is_null() {
+            return Err(3);
+        }
+        Ok(hwnd)
     }
+}
+
+/// Create the overlay, wire it to `app`, and run the message loop. Returns the process exit code.
+pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
+    // Must happen before any window is created: after the first window exists the process's DPI
+    // context is fixed, and setting it later silently succeeds while changing nothing.
+    unsafe {
+        sys::apply_dpi_awareness();
+    }
+    let instance = unsafe { sys::GetModuleHandleW(std::ptr::null()) };
+    let mut rt = Runtime {
+        app,
+        host: Host {
+            hwnd: std::ptr::null_mut(),
+            surface: Surface::new(),
+            clock: crate::time::PerfClock::new(),
+            tray: None,
+            frame: cfg.frame,
+            scale: cfg.scale.max(0.25),
+            topmost: cfg.topmost,
+            ignore_input: false,
+            visible: false,
+            rate_hz: 0,
+            tick_ms: 0,
+            last_cursor: sys::POINT { x: 0, y: 0 },
+            captured: false,
+            exit: 0,
+        },
+    };
+    let me: *mut Runtime<A> = &mut rt;
+
+    let f = cfg.frame;
+    let hwnd = match unsafe { spawn_window::<A>(instance, cfg) } {
+        Ok(h) => h,
+        Err(code) => return code,
+    };
     rt.host.hwnd = hwnd;
     unsafe {
         sys::SetWindowLongPtrW(hwnd, sys::GWLP_USERDATA, me as isize);
@@ -278,10 +292,8 @@ pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
         sys::SetTimer(hwnd, TIMER_SECOND, 1000, None);
     }
     rt.host.show(true);
-    unsafe {
-        rt.app.on_ready(&mut rt.host);
-        rt.host.sync_tick_timer();
-    }
+    rt.app.on_ready(&mut rt.host);
+    rt.host.sync_tick_timer();
 
     let mut msg = sys::MSG::default();
     loop {
@@ -318,14 +330,12 @@ impl Host {
         let want = if self.rate_hz == 0 {
             0
         } else {
-            (1000 / self.rate_hz.max(1) as u32).max(8)
+            (1000 / self.rate_hz.max(1)).max(8)
         };
         if want != self.tick_ms {
             unsafe {
                 if want == 0 {
                     sys::KillTimer(self.hwnd, TIMER_TICK);
-                } else if self.tick_ms == 0 {
-                    sys::SetTimer(self.hwnd, TIMER_TICK, want, None);
                 } else {
                     sys::SetTimer(self.hwnd, TIMER_TICK, want, None);
                 }
@@ -453,7 +463,7 @@ impl Host {
 
     /// Push a painted frame. `rect` should be the painter's dirty bounds; `None` presents all of it.
     pub fn present(&mut self, pixels: &[u8], rect: Option<Rect>) {
-        self.surface.present(self.hwnd, pixels, rect);
+        unsafe { self.surface.present(self.hwnd, pixels, rect) };
     }
 
     #[must_use]
@@ -465,14 +475,14 @@ impl Host {
     pub fn monitors(&self) -> Vec<Monitor> {
         let mut v = displays::enumerate(self.hwnd);
         if v.is_empty() {
-            v.push(displays::monitor_for(self.hwnd, 0));
+            v.push(unsafe { displays::monitor_for(self.hwnd, 0) });
         }
         v
     }
 
     #[must_use]
     pub fn monitor_under(&self) -> Monitor {
-        displays::monitor_for(self.hwnd, 0)
+        unsafe { displays::monitor_for(self.hwnd, 0) }
     }
 
     #[must_use]
@@ -520,12 +530,10 @@ impl Host {
         }
     }
 
-    fn set_cursor(&self, c: Cursor) {
+    fn set_cursor(c: Cursor) {
         let id = match c {
             Cursor::Arrow => sys::IDC_ARROW,
-            Cursor::Grab => sys::IDC_SIZEALL,
-            Cursor::Grabbing => sys::IDC_SIZEALL,
-            Cursor::Move => sys::IDC_SIZEALL,
+            Cursor::Grab | Cursor::Grabbing | Cursor::Move => sys::IDC_SIZEALL,
         };
         unsafe {
             let cur = sys::LoadCursorW(std::ptr::null_mut(), id);
@@ -544,105 +552,23 @@ unsafe extern "system" fn wndproc<A: AppHook + 'static>(
     w: usize,
     l: isize,
 ) -> isize {
-    let ud = sys::GetWindowLongPtrW(hwnd, sys::GWLP_USERDATA);
+    // SAFETY: the contract of a window procedure — `hwnd` is live, and GWLP_USERDATA either
+    // holds the null sentinel or the one `Runtime` pointer installed for it, which outlives
+    // every message the OS dispatches to this window.
+    let ud = unsafe { sys::GetWindowLongPtrW(hwnd, sys::GWLP_USERDATA) };
     if ud == 0 {
         // Includes WM_CREATE/WM_NCCREATE, which CreateWindowExW sends before the pointer exists.
-        return sys::DefWindowProcW(hwnd, msg, w, l);
+        return unsafe { sys::DefWindowProcW(hwnd, msg, w, l) };
     }
-    let rt = &mut *(ud as *mut Runtime<A>);
+    let rt = unsafe { &mut *(ud as *mut Runtime<A>) };
     let host = &mut rt.host;
     let app = &mut rt.app;
 
+    if let Some(answer) = unsafe { on_pointer::<A>(hwnd, msg, w, l, host, app) } {
+        return answer;
+    }
+
     match msg {
-        sys::WM_NCHITTEST => {
-            let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
-            let f = host.frame;
-            let local = Vec2::new(x - f.x0, y - f.y0);
-            // The layered surface already lets clicks fall through fully transparent pixels;
-            // answering explicitly is what makes the answer independent of anti-aliased edge
-            // coverage, which is never exactly zero.
-            if app.hit_shape().contains(local) {
-                sys::HTCLIENT
-            } else {
-                sys::HTTRANSPARENT
-            }
-        }
-        sys::WM_SETCURSOR => {
-            host.set_cursor(app.cursor());
-            1
-        }
-        sys::WM_MOUSEMOVE => {
-            let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
-            let p = Vec2::new(x, y);
-            let dt = host.elapsed();
-            let mut pt = sys::POINT { x: 0, y: 0 };
-            sys::GetCursorPos(&mut pt);
-            // Velocity from the *screen* cursor, not from the message pair: with capture on, a
-            // pointer dragged off the window keeps producing moves whose deltas are meaningless
-            // (wrapped 16-bit coordinates), and the throw would end with a phantom flick.
-            let prev = host.last_cursor;
-            let vel = if dt > 1e-5 && prev.x != 0 {
-                Vec2::new((pt.x - prev.x) as f64 / dt, (pt.y - prev.y) as f64 / dt)
-            } else {
-                Vec2::ZERO
-            };
-            host.last_cursor = pt;
-            let f = host.frame;
-            app.on_input(
-                host,
-                Input::Move {
-                    at: Vec2::new(p.x - f.x0, p.y - f.y0),
-                    vel,
-                    dt,
-                },
-            );
-            0
-        }
-        sys::WM_LBUTTONDOWN => {
-            sys::SetCapture(hwnd);
-            host.captured = true;
-            let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
-            let f = host.frame;
-            app.on_input(
-                host,
-                Input::Press {
-                    at: Vec2::new(x - f.x0, y - f.y0),
-                },
-            );
-            0
-        }
-        sys::WM_LBUTTONUP => {
-            sys::ReleaseCapture();
-            host.captured = false;
-            let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
-            let f = host.frame;
-            app.on_input(
-                host,
-                Input::Release {
-                    at: Vec2::new(x - f.x0, y - f.y0),
-                    vel: Vec2::ZERO,
-                },
-            );
-            0
-        }
-        sys::WM_RBUTTONUP => {
-            let mut pt = sys::POINT { x: 0, y: 0 };
-            sys::GetCursorPos(&mut pt);
-            let st = app.menu_state();
-            if let Some(cmd) = host.popup_menu((pt.x, pt.y), st) {
-                app.on_command(host, cmd);
-                host.sync_tick_timer();
-            }
-            0
-        }
-        sys::WM_MOUSEWHEEL => {
-            let delta = ((w >> 16) as u16 as i16) as i32 / 120;
-            if delta != 0 {
-                app.on_input(host, Input::Wheel { delta });
-                host.sync_tick_timer();
-            }
-            0
-        }
         sys::WM_TIMER => {
             if w == TIMER_TICK {
                 let dt = host.elapsed();
@@ -661,7 +587,7 @@ unsafe extern "system" fn wndproc<A: AppHook + 'static>(
             0
         }
         sys::WM_DPICHANGED => {
-            let suggested = &*(l as *const sys::WINRECT);
+            let suggested = unsafe { &*(l as *const sys::WINRECT) };
             let m = host.monitor_under();
             host.scale = m.scale;
             let rect = Rect::new(
@@ -692,20 +618,11 @@ unsafe extern "system" fn wndproc<A: AppHook + 'static>(
         sys::WM_TRAYICON => {
             let (mouse, _id) = tray::tray_event(l);
             if mouse == sys::WM_LBUTTONUP || mouse == sys::WM_LBUTTONDBLCLK_TRAY {
-                let vis = host.is_visible();
-                app.on_command(
-                    host,
-                    if vis {
-                        Command::ToggleVisible
-                    } else {
-                        Command::ToggleVisible
-                    },
-                );
                 app.on_command(host, Command::ToggleVisible);
                 host.sync_tick_timer();
             } else if mouse == sys::WM_RBUTTONUP {
                 let mut pt = sys::POINT { x: 0, y: 0 };
-                sys::GetCursorPos(&mut pt);
+                unsafe { sys::GetCursorPos(&mut pt) };
                 let st = app.menu_state();
                 if let Some(cmd) = host.popup_menu((pt.x, pt.y), st) {
                     app.on_command(host, cmd);
@@ -715,9 +632,118 @@ unsafe extern "system" fn wndproc<A: AppHook + 'static>(
             0
         }
         sys::WM_DESTROY => {
-            sys::PostQuitMessage(host.exit);
+            unsafe { sys::PostQuitMessage(host.exit) };
             0
         }
-        _ => sys::DefWindowProcW(hwnd, msg, w, l),
+        _ => unsafe { sys::DefWindowProcW(hwnd, msg, w, l) },
     }
 }
+/// Pointer-shaped messages — hit-testing, the cursor, and the whole drag grammar — resolved
+/// against the model's hit box. Returns `None` for every other message, so `wndproc` keeps
+/// the non-pointer list.
+///
+/// # Safety
+/// `host`/`app` must be the disjoint fields of the live `Runtime` for `hwnd`, exactly as
+/// `wndproc` hands them; the Win32 calls act on that window's state.
+unsafe fn on_pointer<A: AppHook + 'static>(
+    hwnd: sys::HWND,
+    msg: u32,
+    w: usize,
+    l: isize,
+    host: &mut Host,
+    app: &mut A,
+) -> Option<isize> {
+    match msg {
+        sys::WM_NCHITTEST => {
+            let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
+            let f = host.frame;
+            let local = Vec2::new(x - f.x0, y - f.y0);
+            // The layered surface already lets clicks fall through fully transparent pixels;
+            // answering explicitly is what makes the answer independent of anti-aliased edge
+            // coverage, which is never exactly zero.
+            Some(if app.hit_shape().contains(local) {
+                sys::HTCLIENT
+            } else {
+                sys::HTTRANSPARENT
+            })
+        }
+        sys::WM_SETCURSOR => {
+            Host::set_cursor(app.cursor());
+            Some(1)
+        }
+        sys::WM_MOUSEMOVE => {
+            let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
+            let p = Vec2::new(x, y);
+            let dt = host.elapsed();
+            let mut pt = sys::POINT { x: 0, y: 0 };
+            unsafe { sys::GetCursorPos(&mut pt) };
+            // Velocity from the *screen* cursor, not from the message pair: with capture on, a
+            // pointer dragged off the window keeps producing moves whose deltas are meaningless
+            // (wrapped 16-bit coordinates), and the throw would end with a phantom flick.
+            let prev = host.last_cursor;
+            let vel = if dt > 1e-5 && prev.x != 0 {
+                Vec2::new((pt.x - prev.x) as f64 / dt, (pt.y - prev.y) as f64 / dt)
+            } else {
+                Vec2::ZERO
+            };
+            host.last_cursor = pt;
+            let f = host.frame;
+            app.on_input(
+                host,
+                Input::Move {
+                    at: Vec2::new(p.x - f.x0, p.y - f.y0),
+                    vel,
+                    dt,
+                },
+            );
+            Some(0)
+        }
+        sys::WM_LBUTTONDOWN => {
+            unsafe { sys::SetCapture(hwnd) };
+            host.captured = true;
+            let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
+            let f = host.frame;
+            app.on_input(
+                host,
+                Input::Press {
+                    at: Vec2::new(x - f.x0, y - f.y0),
+                },
+            );
+            Some(0)
+        }
+        sys::WM_LBUTTONUP => {
+            unsafe { sys::ReleaseCapture() };
+            host.captured = false;
+            let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
+            let f = host.frame;
+            app.on_input(
+                host,
+                Input::Release {
+                    at: Vec2::new(x - f.x0, y - f.y0),
+                    vel: Vec2::ZERO,
+                },
+            );
+            Some(0)
+        }
+        sys::WM_RBUTTONUP => {
+            let mut pt = sys::POINT { x: 0, y: 0 };
+            unsafe { sys::GetCursorPos(&mut pt) };
+            let st = app.menu_state();
+            if let Some(cmd) = host.popup_menu((pt.x, pt.y), st) {
+                app.on_command(host, cmd);
+                host.sync_tick_timer();
+            }
+            Some(0)
+        }
+        sys::WM_MOUSEWHEEL => {
+            let delta = ((w >> 16) as u16 as i16) as i32 / 120;
+            if delta != 0 {
+                app.on_input(host, Input::Wheel { delta });
+                host.sync_tick_timer();
+            }
+            Some(0)
+        }
+        _ => None,
+    }
+}
+

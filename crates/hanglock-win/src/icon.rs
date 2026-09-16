@@ -11,7 +11,9 @@ use crate::sys;
 const S: i32 = 32;
 
 #[must_use]
-pub fn create(instance: sys::HMODULE) -> sys::HICON {
+/// # Safety
+/// `instance` is handed to `CreateIcon`, which dereferences it; pass the live module handle.
+pub unsafe fn create(instance: sys::HMODULE) -> sys::HICON {
     let mut xor = vec![0u8; (S as usize) * (S as usize) * 4];
     for y in 0..S {
         for x in 0..S {

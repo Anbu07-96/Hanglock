@@ -72,7 +72,7 @@ pub fn set_enabled(exe: &str, enabled: bool) -> Result<(), i32> {
             sub.as_ptr(),
             val.as_ptr(),
             REG_SZ,
-            wide.as_ptr() as *const core::ffi::c_void,
+            wide.as_ptr().cast::<core::ffi::c_void>(),
             bytes,
         )
     };

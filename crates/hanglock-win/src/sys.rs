@@ -111,7 +111,7 @@ pub const SWP_NOACTIVATE: UINT = 0x0010;
 pub const SWP_NOZORDER: UINT = 0x0004;
 pub const SWP_NOREDRAW: UINT = 0x0008;
 pub const SWP_NOOWNERZORDER: UINT = 0x0200;
-/// HWND_TOPMOST / HWND_NOTOPMOST are sentinel window handles, not pointers.
+/// `HWND_TOPMOST` / `HWND_NOTOPMOST` are sentinel window handles, not pointers.
 pub const HWND_TOPMOST: HWND = -1isize as *mut c_void;
 pub const HWND_NOTOPMOST: HWND = -2isize as *mut c_void;
 
@@ -290,7 +290,6 @@ impl Default for WNDCLASSEXW {
     }
 }
 
-
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct MONITORINFO {
@@ -369,7 +368,7 @@ pub const NIS_HIDDEN: DWORD = 0x0001;
 pub const NIS_SHAREDICON: DWORD = 0x0002;
 pub const NOTIFYICON_VERSION_4: DWORD = 4;
 /// Low word of `lParam` for `WM_TRAYICON`.
-pub const NIN_SELECT: UINT = WM_USER + 0;
+pub const NIN_SELECT: UINT = WM_USER;
 pub const NINF_KEY: UINT = 0x1;
 pub const WM_CONTEXTMENU_L: UINT = 0x007B;
 
@@ -610,8 +609,12 @@ pub fn last_error() -> DWORD {
 
 /// Last-resort DPI: `GetDpiForWindow` is Win10 1607+, so it is resolved at runtime and the fallback
 /// is the old system-wide value read off a screen DC.
+///
+/// # Safety
+/// `hwnd` is passed to `GetDpiForWindow`, which dereferences it; a live-or-null handle is the
+/// caller's guarantee (null yields the documented 0 and the fallback path never touches it).
 #[must_use]
-pub fn dpi_of_window(hwnd: HWND) -> UINT {
+pub unsafe fn dpi_of_window(hwnd: HWND) -> UINT {
     unsafe {
         // The symbol is imported normally here, and Windows 10 1607 is the documented floor for the
         // whole app (see README), so no dynamic resolution is needed. If the floor ever moves back
@@ -641,20 +644,24 @@ pub fn dpi_of_window(hwnd: HWND) -> UINT {
 /// Calls a Win32 entry point; the pointer returned by `GetProcAddress` is cast to the function's
 /// type, which is only sound if the name resolves to that API. It does.
 pub unsafe fn apply_dpi_awareness() -> bool {
-    let module = GetModuleHandleW(wide("user32.dll").as_ptr());
-    if module.is_null() {
-        return false;
+    // SAFETY: every call here is a direct Win32 entry point; the transmute is sound because a
+    // resolved `SetProcessDpiAwarenessContext` export has exactly this signature.
+    unsafe {
+        let module = GetModuleHandleW(wide("user32.dll").as_ptr());
+        if module.is_null() {
+            return false;
+        }
+        let name = b"SetProcessDpiAwarenessContext\0";
+        let addr = GetProcAddress(module, name.as_ptr().cast::<i8>());
+        if addr.is_null() {
+            // Pre-1703: the best available is system-DPI aware, which is still better than nothing.
+            SetProcessDPIAware();
+            return false;
+        }
+        type Fn = unsafe extern "system" fn(HANDLE) -> BOOL;
+        let f: Fn = std::mem::transmute::<*const c_void, Fn>(addr);
+        f(DPI_AWARENESS_CONTEXT_PM_V2) != 0
     }
-    let name = b"SetProcessDpiAwarenessContext\0";
-    let addr = GetProcAddress(module, name.as_ptr() as *const i8);
-    if addr.is_null() {
-        // Pre-1703: the best available is system-DPI aware, which is still better than nothing.
-        SetProcessDPIAware();
-        return false;
-    }
-    type Fn = unsafe extern "system" fn(HANDLE) -> BOOL;
-    let f: Fn = std::mem::transmute::<*const c_void, Fn>(addr);
-    f(DPI_AWARENESS_CONTEXT_PM_V2) != 0
 }
 
 /// `SHAppBarMessage` is in `shell32` but the answers are advisory (which edge the taskbar is on),
@@ -667,7 +674,7 @@ pub fn query_taskbar(hwnd: HWND) -> Option<(bool, bool)> {
             return None;
         }
         let name = b"SHAppBarMessage\0";
-        let addr = GetProcAddress(module, name.as_ptr() as *const i8);
+        let addr = GetProcAddress(module, name.as_ptr().cast::<i8>());
         if addr.is_null() {
             return None;
         }

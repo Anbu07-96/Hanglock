@@ -20,7 +20,7 @@ pub fn enumerate(primary_hwnd: sys::HWND) -> Vec<Monitor> {
     let vy = unsafe { sys::GetSystemMetrics(sys::SM_YVIRTUALSCREEN) };
     let vw = unsafe { sys::GetSystemMetrics(sys::SM_CXVIRTUALSCREEN) };
     if vw <= 0 || count == 1 {
-        out.push(monitor_for(primary_hwnd, 0));
+        out.push(unsafe { monitor_for(primary_hwnd, 0) });
         return out;
     }
     let mut seen: Vec<(i32, i32)> = Vec::new();
@@ -57,7 +57,7 @@ pub fn enumerate(primary_hwnd: sys::HWND) -> Vec<Monitor> {
         x += 64;
     }
     if out.is_empty() {
-        out.push(monitor_for(primary_hwnd, 0));
+        out.push(unsafe { monitor_for(primary_hwnd, 0) });
     }
     out
 }
@@ -83,15 +83,19 @@ fn scale_for_rect(rect: sys::WINRECT, hwnd: sys::HWND) -> f64 {
     let _ = rect;
     let dpi = unsafe { sys::GetDpiForWindow(hwnd) };
     let dpi = if dpi == 0 {
-        sys::dpi_of_window(hwnd)
+        unsafe { sys::dpi_of_window(hwnd) }
     } else {
         dpi
     };
     (dpi as f64 / 96.0).max(0.5)
 }
 
+/// The monitor a window hangs from, with the taskbar's geometry folded in.
+///
+/// # Safety
+/// `hwnd` is passed to monitor- and DPI-queries that dereference it; live-or-null is the contract.
 #[must_use]
-pub fn monitor_for(hwnd: sys::HWND, index: u32) -> Monitor {
+pub unsafe fn monitor_for(hwnd: sys::HWND, index: u32) -> Monitor {
     let hmon = unsafe { sys::MonitorFromWindow(hwnd, sys::MONITOR_DEFAULTTONEAREST) };
     let (r, w, flags) = if hmon.is_null() {
         let cx = unsafe { sys::GetSystemMetrics(sys::SM_CXSCREEN) };
@@ -116,7 +120,7 @@ pub fn monitor_for(hwnd: sys::HWND, index: u32) -> Monitor {
     };
     let dpi = unsafe { sys::GetDpiForWindow(hwnd) };
     let dpi = if dpi == 0 {
-        sys::dpi_of_window(hwnd)
+        unsafe { sys::dpi_of_window(hwnd) }
     } else {
         dpi
     };
