@@ -158,9 +158,16 @@ mod tests {
 
     #[test]
     fn century_rule() {
-        // 1900 was not a leap year, 2000 was: the 29 Feb 1900 gap is 31 days apart.
-        let d2000 = civil_from_unix_ms(951_782_400_000); // 2000-03-01
+        // 2000 WAS a leap year: the day before 2000-03-01 is the 29th of February.
+        let d2000 = civil_from_unix_ms(951_868_800_000); // 2000-03-01
         assert_eq!((d2000.year, d2000.month, d2000.day), (2000, 3, 1));
+        // 1900 was NOT: the day before 1900-03-01 is the 28th — no phantom leap day. The
+        // constant the first draft of this test carried was 2000-02-29 mislabelled; the
+        // implementation was right and the check now proves what the comment promises.
+        let d1900 = civil_from_unix_ms(-2_203_891_200_000); // 1900-03-01
+        assert_eq!((d1900.year, d1900.month, d1900.day), (1900, 3, 1));
+        let prev = civil_from_unix_ms(-2_203_891_200_000 - 86_400_000);
+        assert_eq!((prev.year, prev.month, prev.day), (1900, 2, 28));
     }
 
     #[test]

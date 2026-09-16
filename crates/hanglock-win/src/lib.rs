@@ -15,7 +15,6 @@
 // non-Windows linker has no chance of satisfying them (cargo check passes, cargo test's harness
 // link does not). Compiled only where those libraries exist — mirroring apps/hanglock's app.rs.
 #![cfg(windows)]
-
 // Win32 geometry arrives and leaves as `int`/`DWORD`. These casts retype screen-space quantities
 // that are bounded by the display modes they came from; try_from at every FFI edge would bury the
 // calls that genuinely need auditing in arithmetic that cannot fail in practice.
