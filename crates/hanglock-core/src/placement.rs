@@ -29,23 +29,23 @@ impl Rect {
         Self { x0, y0, x1, y1 }
     }
     #[must_use]
-    pub fn w(self: &Self) -> f64 {
+    pub fn w(&self) -> f64 {
         self.x1 - self.x0
     }
     #[must_use]
-    pub fn h(self: &Self) -> f64 {
+    pub fn h(&self) -> f64 {
         self.y1 - self.y0
     }
     #[must_use]
-    pub fn contains(self: &Self, p: Vec2) -> bool {
+    pub fn contains(&self, p: Vec2) -> bool {
         p.x >= self.x0 && p.x < self.x1 && p.y >= self.y0 && p.y < self.y1
     }
     #[must_use]
-    pub fn scaled(self: &Self, k: f64) -> Self {
+    pub fn scaled(&self, k: f64) -> Self {
         Self::new(self.x0 * k, self.y0 * k, self.x1 * k, self.y1 * k)
     }
     #[must_use]
-    pub fn shifted(self: &Self, d: Vec2) -> Self {
+    pub fn shifted(&self, d: Vec2) -> Self {
         Self::new(self.x0 + d.x, self.y0 + d.y, self.x1 + d.x, self.y1 + d.y)
     }
 }

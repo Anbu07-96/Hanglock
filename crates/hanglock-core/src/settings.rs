@@ -22,7 +22,6 @@ use crate::ids::{ClickThrough, PostureKind};
 pub const SCHEMA: u32 = 1;
 
 pub mod limits {
-    use super::*;
     pub const HANG: (f64, f64) = (70.0, 260.0);
     pub const SCALE: (f64, f64) = (0.75, 1.75);
     pub const OPACITY: (f64, f64) = (0.35, 1.0);
