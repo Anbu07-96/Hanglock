@@ -51,10 +51,13 @@ const GROUP_GAP: f64 = 12.0;
 const LABEL_W: f64 = 180.0;
 const BUTTON_W: f64 = 64.0;
 const BUTTON_GAP: f64 = 6.0;
-/// Child control ids. A nudge row is four controls, so the slot number carries both the row and the
-/// part, and one division recovers them from a `WM_COMMAND`.
+/// Child control ids. A slot is an index into the flat list of every part of every row, in layout
+/// order, so [`Panel::row_part_of`] walks that list back. It is deliberately not a fixed number of ids
+/// per row: a row's part count is its option count, so a stride is a promise that no row is ever taller
+/// than the promise — and a broken promise is two controls sharing an id, which reads as one setting
+/// answering another. `ID_CLOSE` sits just below the base, which is why the `id < ID_BASE` guard has to
+/// come before any subtraction.
 const ID_BASE: usize = 0x4900;
-const PARTS_PER_ROW: usize = 4;
 const ID_CLOSE: usize = ID_BASE - 1;
 
 /// What to do when a row was answered: the app's turn, reached without this window knowing what an
@@ -67,8 +70,9 @@ pub type AnswerFn = unsafe fn(*mut core::ffi::c_void, RowId, panel::Step);
 /// not have to.
 pub type OpenFn = unsafe fn(*mut core::ffi::c_void, sys::HMODULE, Vec<Group>) -> sys::HWND;
 
-/// Which piece of a row this is. A row is one *setting* and up to four controls, and the difference
-/// matters: only the buttons take the tab, and only the value and the label are `STATIC`.
+/// Which piece of a row this is. A row is one *setting* and a handful of controls — a nudge is four, a
+/// choice is a label plus one per option — and the difference matters: only the buttons take the tab,
+/// and only the value and the label are `STATIC`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Part {
     /// The row's own words, as a label. Not used by a check row, where the same words are the box's
@@ -108,6 +112,23 @@ impl Panel {
             .nth(index)
             .cloned()
     }
+
+    /// Which row a control id belongs to, and which of that row's parts it is. Counts parts instead of
+    /// dividing by a stride, so a row gaining an option cannot collide with its neighbour. `None` for an
+    /// id past the end of the list, which is what a stale child racing a repaint produces.
+    fn row_part_of(&self, slot: usize) -> Option<(Row, usize)> {
+        let mut base = 0;
+        for i in 0.. {
+            let Some(row) = self.row_at(i) else {
+                return None;
+            };
+            let k = part_count(&row);
+            if slot < base + k {
+                return Some((row, slot - base));
+            }
+            base += k;
+        }
+    }
 }
 
 /// The controls of one row, in the order they are created and tabbed through.
@@ -129,6 +150,16 @@ fn parts(row: &Row) -> Vec<(Part, usize)> {
             (Part::More, 0),
         ],
         Control::Push => vec![(Part::Push, 0)],
+    }
+}
+
+/// How many controls a row has, which is [`parts`] without the list: the id walk only needs the count,
+/// and it runs for every row on every repaint.
+fn part_count(row: &Row) -> usize {
+    match &row.control {
+        Control::Check { .. } | Control::Push => 1,
+        Control::Choice { options, .. } => options.len() + 1,
+        Control::Nudge { .. } => 4,
     }
 }
 
@@ -300,6 +331,9 @@ unsafe fn repaint(hwnd: sys::HWND, panel: &mut Panel) {
     let w = WIDTH * s;
     let mut y = MARGIN * s;
     let mut ri = 0usize;
+    // Ids run densely over the parts of the rows already laid out. That is the other half of the pair
+    // with `row_part_of`: both walk the same list in the same order, so they cannot disagree.
+    let mut base = 0usize;
     // Cloned so the rows can be read while the children are created: a borrow of `panel.groups` and a
     // mutation of `panel.children` would otherwise fight, and the row set is a dozen small values that
     // are walked only when a command lands, not per frame.
@@ -322,9 +356,10 @@ unsafe fn repaint(hwnd: sys::HWND, panel: &mut Panel) {
         }
         y += (CAP_H + 2.0) * s;
         for row in &group.rows {
-            unsafe { sync_row(hwnd, panel, row, ri, y, w, s) };
+            unsafe { sync_row(hwnd, panel, row, ri, base, y, w, s) };
             y += (row_height(row) + ROW_GAP) * s;
             ri += 1;
+            base += part_count(row);
         }
         y += GROUP_GAP * s;
     }
@@ -357,6 +392,7 @@ unsafe fn sync_row(
     panel: &mut Panel,
     row: &Row,
     ri: usize,
+    base: usize,
     y: f64,
     w: f64,
     s: f64,
@@ -368,7 +404,7 @@ unsafe fn sync_row(
     while panel.children[ri].len() < want.len() {
         let k = panel.children[ri].len();
         let (part, which) = want[k];
-        let id = ID_BASE + ri * PARTS_PER_ROW + k;
+        let id = ID_BASE + base + k;
         let child = unsafe { make_child(hwnd, panel, row, part, which, k == 0, id, s) };
         panel.children[ri].push(child);
     }
@@ -646,9 +682,7 @@ unsafe extern "system" fn wndproc(hwnd: sys::HWND, msg: u32, w: usize, l: isize)
                 return unsafe { sys::DefWindowProcW(hwnd, msg, w, l) };
             }
             let slot = id - ID_BASE;
-            let row_index = slot / PARTS_PER_ROW;
-            let part_index = slot % PARTS_PER_ROW;
-            let Some(row) = panel.row_at(row_index) else {
+            let Some((row, part_index)) = panel.row_part_of(slot) else {
                 return 0;
             };
             let Some((part, which)) = parts(&row).get(part_index).copied() else {
@@ -752,19 +786,50 @@ mod tests {
     }
 
     #[test]
-    fn the_id_per_row_holds_every_row_s_parts() {
-        // `WM_COMMAND` recovers a row and a part from one id by dividing by `PARTS_PER_ROW`. If a row
-        // ever grows past that, two controls share an id and a click answers the wrong setting — with
-        // no crash and nothing to see. This is the assert that makes adding a fifth part an edit here
-        // rather than a bug report.
-        for row in rows() {
-            assert!(
-                parts(&row).len() <= PARTS_PER_ROW,
-                "{:?} has {} parts",
-                row.id,
-                parts(&row).len()
+    fn every_part_of_every_row_has_its_own_id() {
+        // The count the ids are allocated from and the list the controls are created from have to agree,
+        // and every id has to land back on the row and part it came from. A row gaining an option is an
+        // ordinary edit here; getting it wrong is a click on one setting answering another, with nothing
+        // to crash on and nothing to see.
+        let all = rows();
+        let mut p = Panel {
+            groups: panel::form(&Settings::default(), &[]),
+            children: Vec::new(),
+            captions: Vec::new(),
+            close: std::ptr::null_mut(),
+            font: std::ptr::null_mut(),
+            instance: std::ptr::null_mut(),
+            runtime: std::ptr::null_mut(),
+            on_answer: no_answer,
+        };
+        let mut slot = 0;
+        for row in &all {
+            assert_eq!(
+                parts(row).len(),
+                part_count(row),
+                "{:?} counts its parts wrong",
+                row.id
             );
+            for (k, &(part, which)) in parts(row).iter().enumerate() {
+                let (back, part_index) = p.row_part_of(slot + k).expect("every id points at a row");
+                assert_eq!(back.id, row.id, "id {slot} answers the wrong row");
+                assert_eq!(part_index, k, "id {} answers the wrong part", slot + k);
+                assert_eq!(
+                    parts(&back)[part_index],
+                    (part, which),
+                    "{:?} part {k} is not what was created",
+                    row.id
+                );
+            }
+            slot += part_count(row);
         }
+        assert_eq!(p.row_part_of(slot), None, "one past the last id");
+        assert!(
+            slot > all.len(),
+            "the fixture would pass with one part per row, which is the untested case"
+        );
+        p.groups.clear();
+        assert_eq!(p.row_part_of(0), None, "an empty panel answers nothing");
     }
 
     #[test]
@@ -776,8 +841,11 @@ mod tests {
             for row in rows() {
                 let h = row_height(&row);
                 for (k, (part, which)) in parts(&row).iter().enumerate() {
-                    let y = if *part == Part::Radio { ROW_H } else { 0.0 };
-                    let (x, top, cw, ch) = box_of(&row, *part, *which, y, w, scale);
+                    // `box_of` takes the row's top edge in device px and adds the label line itself for
+                    // a radio, so the origin is 0.0 and the bound is the row's height at this scale. The
+                    // `ROW_H` this used to pass in is a logical pixel; it happened to be inside the bound
+                    // at 100 % and outside it everywhere else.
+                    let (x, top, cw, ch) = box_of(&row, *part, *which, 0.0, w, scale);
                     assert!(cw > 0 && ch > 0, "empty control {:?}/{:?}", row.id, part);
                     assert!(x >= 0, "negative x {:?}/{:?} at {scale}", row.id, part);
                     assert!(
@@ -788,7 +856,7 @@ mod tests {
                         x + cw
                     );
                     assert!(
-                        f64::from(top + ch) <= (y + h) * scale + 1.0,
+                        f64::from(top + ch) <= h * scale + 1.0,
                         "{:?}/{:?} part {k} leaves its row at {scale}",
                         row.id,
                         part

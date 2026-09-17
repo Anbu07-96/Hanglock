@@ -196,8 +196,10 @@ pub fn save_at(dir: &Path, s: &Settings) -> Result<(), String> {
     Err(last)
 }
 
-/// Persist to the platform's own directory.
-#[cfg(any(windows, test))]
+/// Persist to the platform's own directory. Windows-only, and not `#[cfg(test)]` too: every test of the
+/// write path goes through [`save_at`], which is where the interesting behaviour is, and the directory
+/// this picks does not exist on the machine running them.
+#[cfg(windows)]
 pub fn save(s: &Settings) -> Result<(), String> {
     save_at(&dir(), s)
 }
