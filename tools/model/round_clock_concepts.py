@@ -27,8 +27,11 @@ def circle(cv,cx,cy,r,col,aa=1.0):
 def ring(cv,cx,cy,r,w,col):
     circle(cv,cx,cy,r,col); circle(cv,cx,cy,r-w,(col[0],col[1],col[2],0.0))
 
-def one(path,name):
+def one(path,name,text="10:42", suffix="PM", bg=None, theta=0.0):
     k=CONCEPTS[name]; r=k['radius']; ax=170; ay=20; cx=ax; cy=ay+k['hang']+r; w=340; h=int(cy+r+42); cv=Canvas(w,h)
+    bg = k['bg'] if bg is None else bg
+    # theta is a preview-only static swing, using the same anchor-to-body relationship.
+    cx = ax + k['hang'] * math.sin(theta); cy = ay + k['hang'] * math.cos(theta) + r
     # background is only for preview presentation, not an app surface
     circle(cv,ax,ay+2,12,(*k['mount'],.94)); bar(cv,ax-22,ay+1,ax+22,ay+1,2.4,(*k['mount'],.96),end=0.25)
     bar(cv,ax,ay+5,cx,cy-r+3,k['cord'],(*k['accent'],.92),end=.5)
@@ -36,15 +39,22 @@ def one(path,name):
     circle(cv,cx,cy,r,k['body']); ring(cv,cx,cy,r-1.5,1.8,k['rim'])
     # eyelet is visibly part of the clock, with the cord terminating in it
     circle(cv,cx,cy-r+3,7,(*k['mount'],.95)); circle(cv,cx,cy-r+3,3,(.02,.025,.03,.98))
-    text='10:42'; cap=min(r*.42,(r*1.55)/(len(text)*.96)); tw=len(text)*cap*.96
+    cap=min(r*.42,(r*1.55)/(len(text)*.96)); tw=len(text)*cap*.96
     draw_text(cv,text,cx-tw/2,cy-cap*.43,cap,(*k['ink'],1),weight=.92)
-    draw_text(cv,'PM',cx+tw/2+cap*.12,cy-cap*.18,cap*.30,(*k['suffix'],.95),weight=.9)
+    if suffix:
+        draw_text(cv,suffix,cx+tw/2+cap*.12,cy-cap*.18,cap*.30,(*k['suffix'],.95),weight=.9)
     # tiny accent tick at six o'clock gives the face a designed datum without copying a dial
     bar(cv,cx,cy+r*.72,cx,cy+r*.82,1.0,(*k['accent'],.65),end=.35)
     write_png(path,cv.w,cv.h,cv.over_solid(k['bg']),3)
 
 def main(out):
-    os.makedirs(out,exist_ok=True)
-    for n in CONCEPTS: one(os.path.join(out,'round-'+n+'.png'),n)
-    print('round previews ->',out)
+    os.makedirs(out, exist_ok=True)
+    n = "minimal"
+    one(os.path.join(out, "round-minimal-light.png"), n, bg=(.90,.89,.86))
+    one(os.path.join(out, "round-minimal-dark.png"), n, bg=(.035,.045,.06))
+    one(os.path.join(out, "round-minimal-seconds.png"), n, text="10:42:07", suffix="PM", bg=(.035,.045,.06))
+    one(os.path.join(out, "round-minimal-rest.png"), n, text="23:45", suffix="", bg=(.90,.89,.86))
+    one(os.path.join(out, "round-minimal-swung.png"), n, theta=0.16, bg=(.90,.89,.86))
+    print("round previews ->", out)
+
 if __name__=='__main__': main(sys.argv[1] if len(sys.argv)>1 else 'docs/previews/phase-2.5b-round')
