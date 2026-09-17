@@ -64,19 +64,6 @@ pub enum Command {
     Quit,
 }
 
-impl Command {
-    /// Whether this command needs the overlay to answer the mouse. The tray marks the ones that do not
-    /// as available even in `click_through = "always"`; the menu is not allowed to offer an item that
-    /// silently does nothing, because that is the moment a user stops trusting it.
-    #[must_use]
-    pub fn needs_clickable_overlay(self) -> bool {
-        matches!(
-            self,
-            Self::SetAnchor(_) | Self::ResetPosition | Self::HangUp | Self::HangDown
-        )
-    }
-}
-
 /// Pointer and wheel input, already converted into the overlay's own device-pixel space.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Input {
@@ -142,9 +129,11 @@ pub trait OverlayHost {
     fn set_topmost(&mut self, topmost: bool);
     /// Move and/or resize in device px. Must not activate the window.
     fn set_frame(&mut self, frame: Rect);
-    /// Whole-window click-through, for the `click_through = "always"` case. The per-pixel case is
-    /// not here because it is not a toggle: it is `HitTest`, below.
-    fn set_ignore_input(&mut self, ignore: bool);
+    /// The mouse mode, as the two window styles that implement it. Which of the three modes a host
+    /// turns into which style is the backend's business; what the seam fixes is that one call sets the
+    /// whole pair, because `WS_EX_TRANSPARENT` and the hit test's answer have to agree or the clock
+    /// becomes a window that ignores some clicks and eats others.
+    fn set_input_mode(&mut self, mode: ClickThrough);
     fn show(&mut self, visible: bool);
     #[must_use]
     fn frame(&self) -> Rect;

@@ -37,6 +37,16 @@ pub type HMENU = *mut c_void;
 pub type HMODULE = *mut c_void;
 pub type HANDLE = *mut c_void;
 pub type HFONT = *mut c_void;
+
+/// The `hMenu` argument for a *child* window, which Win32 overloads as the control id. Nothing
+/// dereferences the pointer — the OS reads the number back out of it — so this is the one place in the
+/// crate that turns an integer into a pointer, and the one place that says why the lint about it is
+/// wrong here.
+#[allow(clippy::usize_as_ptr)]
+#[must_use]
+pub const fn id_menu(id: usize) -> HMENU {
+    id as *mut core::ffi::c_void
+}
 pub type WPARAM = usize;
 pub type LPARAM = isize;
 pub type LRESULT = isize;
@@ -47,6 +57,7 @@ pub type BOOL = i32;
 pub type LONG = i32;
 pub type ULONG = u32;
 pub type WORD = u16;
+pub type SHORT = i16;
 pub type BYTE = u8;
 pub type WCHAR = u16;
 /// The `GWLP_*` and `SWP_*` argument slots are pointer-sized on x64 and 32-bit on x86; `isize`
@@ -64,10 +75,26 @@ pub const WS_EX_LAYERED: DWORD = 0x0008_0000;
 pub const WS_EX_TOPMOST: DWORD = 0x0000_0008;
 pub const WS_EX_TOOLWINDOW: DWORD = 0x0000_0080;
 pub const WS_EX_NOACTIVATE: DWORD = 0x0800_0000;
+/// The style that makes the layered window transparent to the mouse. Named, because two places set it
+/// now: the overlay's own style sync and the model's `click_through = "always"` refusal.
+pub const WS_EX_TRANSPARENT: DWORD = 0x0000_0020;
+pub const GWL_EXSTYLE: LONG = -20;
+pub const GWL_STYLE: LONG = -16;
+pub const WS_CHILD: DWORD = 0x4000_0000;
+pub const WS_TABSTOP: DWORD = 0x0001_0000;
+pub const WS_GROUP: DWORD = 0x0002_0000;
+pub const WS_DISABLED: DWORD = 0x0800_0000;
+/// A title bar and a close box, for the settings window only. The overlay has neither and must keep
+/// it that way.
+pub const WS_CAPTION: DWORD = 0x00C0_0000;
+pub const WS_SYSMENU: DWORD = 0x0008_0000;
+pub const WS_MINIMIZEBOX: DWORD = 0x0002_0000;
 
 pub const WM_NULL: UINT = 0x0000;
 pub const WM_CREATE: UINT = 0x0001;
 pub const WM_DESTROY: UINT = 0x0002;
+/// Sent after the window's children are gone, which is when a font the children used may be freed.
+pub const WM_NCDESTROY: UINT = 0x0082;
 pub const WM_SIZE: UINT = 0x0005;
 pub const WM_ACTIVATE: UINT = 0x0006;
 pub const WM_SETFOCUS: UINT = 0x0007;
@@ -92,6 +119,39 @@ pub const WM_GETMINMAXINFO: UINT = 0x0024;
 pub const WM_NCLBUTTONDOWN: UINT = 0x00A1;
 pub const WM_ENTERSIZEMOVE: UINT = 0x0231;
 pub const WM_EXITSIZEMOVE: UINT = 0x0232;
+pub const WM_COMMAND: UINT = 0x0111;
+pub const WM_CLOSE: UINT = 0x0010;
+pub const WM_SETFONT: UINT = 0x0030;
+/// The two ids the dialog manager invents when the user presses Esc or Enter. A settings window that
+/// ignored them would swallow the two keys everyone expects to work.
+pub const IDOK: usize = 1;
+pub const IDCANCEL: usize = 2;
+/// `BN_CLICKED`, the `HIWORD(wParam)` of a button's `WM_COMMAND`.
+pub const BN_CLICKED: usize = 0;
+pub const VK_MENU: i16 = 0x12;
+/// `GetKeyState`'s sign bit: "down right now", as opposed to the toggle bit, which is what Alt+Shift
+/// menus flip and is not what we ask.
+pub const KEY_DOWN_MASK: i16 = -0x8000;
+pub const MB_OK: UINT = 0;
+pub const MB_ICONINFORMATION: UINT = 0x40;
+pub const GW_OWNER: LONG = 4;
+pub const GA_ROOT: UINT = 2;
+pub const COLOR_BTNFACE: i32 = 15;
+pub const DEFAULT_GUI_FONT: i32 = 17;
+pub const ERROR_CLASS_ALREADY_EXISTS: DWORD = 1410;
+/// Button styles. These are the `BUTTON` class's own styles, not comctl32's: the settings window uses
+/// no common control, which is what keeps it out of manifest and activation-context territory (see
+/// `docs/windows-overlay-notes.md`).
+pub const BS_PUSHBUTTON: DWORD = 0x0000_0000;
+pub const BS_AUTOCHECKBOX: DWORD = 0x0000_0003;
+pub const BS_AUTORADIOBUTTON: DWORD = 0x0000_0009;
+pub const BM_SETCHECK: UINT = 0x00F1;
+pub const BM_GETCHECK: UINT = 0x00F2;
+pub const BST_UNCHECKED: usize = 0;
+pub const BST_CHECKED: usize = 1;
+/// `STATIC`, the label control.
+pub const SS_LEFT: DWORD = 0x0000_0000;
+
 pub const WM_USER: UINT = 0x0400;
 /// Tray notifications and the deferred-command pump. `WM_APP` ids are private to the process.
 pub const WM_TRAYICON: UINT = WM_USER + 1;
@@ -105,9 +165,15 @@ pub const HTRANSPARENT_CURSOR_OK: LRESULT = 1;
 pub const SW_SHOWNA: i32 = 8;
 pub const SW_HIDE: i32 = 0;
 pub const SW_SHOW: i32 = 5;
+pub const SW_RESTORE: i32 = 9;
+/// `CreateWindowExW`'s "you pick", which for a top-level window means the cascade the shell uses. The
+/// settings window is placed by the system on purpose: it is a window the user asked to appear, not an
+/// overlay that has to sit exactly where physics put it.
+pub const CW_USEDEFAULT: LONG = -2_147_483_648;
 pub const SWP_NOSIZE: UINT = 0x0001;
 pub const SWP_NOMOVE: UINT = 0x0002;
 pub const SWP_NOACTIVATE: UINT = 0x0010;
+pub const SWP_SHOWWINDOW: UINT = 0x0040;
 pub const SWP_NOZORDER: UINT = 0x0004;
 pub const SWP_NOREDRAW: UINT = 0x0008;
 pub const SWP_NOOWNERZORDER: UINT = 0x0200;
@@ -378,6 +444,7 @@ pub const MF_CHECKED: DWORD = 0x0008;
 pub const MF_UNCHECKED: DWORD = 0x0000;
 pub const MF_DISABLED: DWORD = 0x0002;
 pub const MF_GRAYED: DWORD = 0x0001;
+pub const MF_POPUP: DWORD = 0x0010;
 pub const TPM_RETURNCMD: DWORD = 0x0100;
 pub const TPM_LEFTALIGN: DWORD = 0x0000;
 pub const TPM_RIGHTBUTTON: DWORD = 0x0002;
@@ -500,9 +567,59 @@ extern "system" {
     pub fn SetProcessDpiAwarenessContext(ctx: HANDLE) -> BOOL;
     pub fn IsWindow(hwnd: HWND) -> BOOL;
     pub fn ScreenToClient(hwnd: HWND, point: *mut POINT) -> BOOL;
+    /// Tab / arrow / space / Enter for a window's children. The message loop calls this before
+    /// `TranslateMessage`, which is the whole of the settings window's keyboard support: no accelerator
+    /// table, no dialog template, no common controls.
+    pub fn IsDialogMessageW(hwnd: HWND, msg: *const MSG) -> BOOL;
+    /// The state of a key at this instant. `-0x8000` means held.
+    pub fn GetKeyState(virtual_key: i32) -> SHORT;
+    pub fn SetFocus(hwnd: HWND) -> HWND;
+    pub fn MoveWindow(hwnd: HWND, x: LONG, y: LONG, w: LONG, h: LONG, repaint: BOOL) -> BOOL;
+    pub fn SetWindowTextW(hwnd: HWND, text: *const WCHAR) -> BOOL;
+    pub fn EnableWindow(hwnd: HWND, enable: BOOL) -> BOOL;
+    pub fn GetSysColorBrush(index: i32) -> HBRUSH;
+    /// Client rect in, window rect out. The settings window is laid out in client coordinates and
+    /// sized by what its rows need, so the frame has to be added rather than guessed at.
+    pub fn AdjustWindowRectEx(
+        rect: *mut WINRECT,
+        style: DWORD,
+        menu: BOOL,
+        ex_style: DWORD,
+    ) -> BOOL;
+    /// The About box. A modal message box is the one dialog worth having: it needs no window, no
+    /// layout, no font handling, and it cannot be left open with stale values in it.
+    pub fn MessageBoxW(hwnd: HWND, text: *const WCHAR, caption: *const WCHAR, kind: UINT) -> i32;
 }
 
 pub type COLORREF = DWORD;
+
+/// `SPI_GETICONTITLELOGFONT`: the font the shell draws icon labels in, which on every Windows from 7
+/// to 11 is the UI font at the size the user chose. Asking for it is how the settings window gets
+/// Segoe UI 9 without a manifest, a common-control class, or a hard-coded face name — and
+/// `DEFAULT_GUI_FONT`, the other candidate, is not that font: it is the old 8 pt ANSI face.
+pub const SPI_GETICONTITLELOGFONT: UINT = 0x001F;
+pub const LF_FACESIZE: usize = 32;
+
+/// `LOGFONTW`, 92 bytes: seven `LONG`s, eight `BYTE`s and a 32-`WCHAR` face name.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct LOGFONTW {
+    pub lf_height: LONG,
+    pub lf_width: LONG,
+    pub lf_escapement: LONG,
+    pub lf_orientation: LONG,
+    pub lf_weight: LONG,
+    pub lf_italic: BYTE,
+    pub lf_underline: BYTE,
+    pub lf_strike_out: BYTE,
+    pub lf_char_set: BYTE,
+    pub lf_out_precision: BYTE,
+    pub lf_clip_precision: BYTE,
+    pub lf_quality: BYTE,
+    pub lf_pitch_and_family: BYTE,
+    pub lf_face_name: [WCHAR; LF_FACESIZE],
+}
+const _: [(); 92] = [(); size_of::<LOGFONTW>()];
 
 #[link(name = "gdi32")]
 extern "system" {
@@ -522,6 +639,7 @@ extern "system" {
     pub fn DeleteObject(obj: *mut c_void) -> BOOL;
     pub fn DeleteDC(dc: HDC) -> BOOL;
     pub fn GetDeviceCaps(dc: HDC, index: i32) -> i32;
+    pub fn CreateFontIndirectW(logfont: *const LOGFONTW) -> HFONT;
 }
 
 #[link(name = "kernel32")]

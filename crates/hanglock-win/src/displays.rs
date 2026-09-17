@@ -5,6 +5,22 @@ use hanglock_core::placement::{Monitor, Rect};
 
 /// All monitors, in device px, each with the scale the window on it should use.
 #[must_use]
+/// The display list for a caller with no window: `--diag`, which has to print the same geometry the
+/// overlay would see without creating one to ask.
+///
+/// Every scale in the answer is the *system* DPI rather than a per-monitor one, because per-monitor DPI
+/// is a property of a window on that monitor and there is no window here. On a single-display machine —
+/// which is what `--diag` is usually run on — the two are the same number.
+#[must_use]
+pub fn monitors() -> Vec<Monitor> {
+    let v = unsafe { enumerate(std::ptr::null_mut()) };
+    if v.is_empty() {
+        vec![unsafe { monitor_for(std::ptr::null_mut(), 0) }]
+    } else {
+        v
+    }
+}
+
 /// Every monitor, in a stable order, with the primary first.
 ///
 /// # Safety

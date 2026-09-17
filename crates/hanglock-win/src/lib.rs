@@ -23,6 +23,7 @@
 pub mod autostart;
 pub mod displays;
 pub mod icon;
+pub mod panel;
 pub mod surface;
 pub mod sys;
 pub mod time;

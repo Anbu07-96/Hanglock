@@ -28,9 +28,11 @@ use crate::displays;
 use crate::surface::Surface;
 use crate::sys;
 use crate::tray::{self, Tray};
+use hanglock_core::ids::ClickThrough;
 use hanglock_core::placement::{Monitor, Rect};
 use hanglock_core::vec2::Vec2;
-use hanglock_platform::{Command, Input, SystemEvent};
+use hanglock_platform::panel::{Group, RowId, Step};
+use hanglock_platform::{Command, Dialogs, Input, OverlayHost, SystemEvent};
 
 pub const TIMER_TICK: usize = 1;
 pub const TIMER_SECOND: usize = 2;
@@ -65,6 +67,12 @@ pub struct HitShape {
     /// zero by a caller with no ring, which degrades to plate-only hit testing.
     pub anchor: Vec2,
     pub anchor_radius: f64,
+    /// Whether the *whole* window answers the mouse, plate and empty space alike. `false` is what makes
+    /// a clock with a soft edge feel like part of the wallpaper; `true` is `click_through = "solid"`,
+    /// where the plate's bounding rectangle is a window even where nothing is drawn, which is what a
+    /// user wants when the card overlaps a busy background and the anti-aliased border keeps stealing
+    /// a click.
+    pub whole_window: bool,
 }
 
 impl HitShape {
@@ -113,6 +121,11 @@ pub trait AppHook {
     fn on_system(&mut self, host: &mut Host, event: SystemEvent);
     /// Queried by `WM_NCHITTEST`, so it must not need to mutate anything.
     fn hit_shape(&self) -> HitShape;
+    /// What a click on one row of the settings window asks for. The window has no idea what a setting
+    /// is: it reports a row and a step, and the app decides — because the answer has to go through the
+    /// same `on_command` the tray uses, or the two surfaces would hold two different ideas of what a
+    /// checkbox does.
+    fn panel_command(&mut self, host: &mut Host, id: RowId, step: Step);
     fn cursor(&self) -> Cursor {
         Cursor::Arrow
     }
@@ -124,8 +137,10 @@ pub trait AppHook {
     fn preferred_rate(&self) -> u32 {
         60
     }
-    /// The checkmark state for the menu. A snapshot, so the tray never reaches into settings.
-    fn menu_state(&self) -> tray::MenuState;
+    /// The checkmark state for the menu. A snapshot, so the tray never reaches into settings, and
+    /// built with `&mut Host` only because the monitor list and the tray's presence are the two facts
+    /// the menu cannot know from the document alone.
+    fn menu_state(&self, host: &mut Host) -> tray::MenuState;
 }
 
 /// The environment handed back to the hook: the window, the surface, the tray, the clock.
@@ -142,11 +157,23 @@ pub struct Host {
     frame: Rect,
     scale: f64,
     topmost: bool,
-    ignore_input: bool,
     visible: bool,
+    /// Which input styles are already on the HWND, so a style write happens on change only.
+    input: ClickThrough,
     rate_hz: u32,
     tick_ms: u32,
-    last_cursor: sys::POINT,
+    /// The settings window, or null. `HWND` rather than an `Option` because it is a Win32 handle whose
+    /// liveness is answered by `IsWindow`, not by this field: a window the user closed with its `x` is
+    /// gone without any message reaching here, and `settings_open` is where that is checked.
+    panel: sys::HWND,
+    /// The `Runtime` this host lives in, for the settings window's click path. Same lifetime rule as
+    /// the window's own `GWLP_USERDATA`, documented at the top of this file.
+    runtime: *mut core::ffi::c_void,
+    instance: sys::HMODULE,
+    /// Set by `run` for the concrete app type, because opening a window needs a window procedure, and
+    /// a window procedure needs to know which app to call. A function pointer rather than a generic
+    /// method so [`Dialogs`] can be implemented on `Host`, which is not generic.
+    open_panel: crate::panel::OpenFn,
     /// True while the left button is held and captured, so a drag that leaves the window keeps
     /// arriving — which it must, because the pointer can outrun the swept box mid-throw and an
     /// uncaptured drag would strand the plate mid-swing with no release to end it.
@@ -176,9 +203,9 @@ impl Default for OverlayConfig {
     }
 }
 
-struct Runtime<A> {
-    app: A,
-    host: Host,
+pub struct Runtime<A> {
+    pub(crate) app: A,
+    pub(crate) host: Host,
 }
 
 /// Register the class and create the layered window. `Err(2)`/`Err(3)` are the process exit
@@ -258,10 +285,14 @@ pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
             frame: cfg.frame,
             scale: cfg.scale.max(0.25),
             topmost: cfg.topmost,
-            ignore_input: false,
             visible: false,
+            input: ClickThrough::Hover,
             rate_hz: 0,
             tick_ms: 0,
+            panel: std::ptr::null_mut(),
+            runtime: std::ptr::null_mut(),
+            instance: std::ptr::null_mut(),
+            open_panel: |_, _, _| std::ptr::null_mut(),
             last_cursor: sys::POINT { x: 0, y: 0 },
             captured: false,
             exit: 0,
@@ -275,6 +306,11 @@ pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
         Err(code) => return i32::from(code),
     };
     rt.host.hwnd = hwnd;
+    rt.host.instance = instance;
+    rt.host.runtime = me as *mut Runtime<A> as *mut core::ffi::c_void;
+    rt.host.open_panel = |state, module, groups| unsafe {
+        crate::panel::open(state, module, groups, crate::panel::answer::<A>)
+    };
     unsafe {
         sys::SetWindowLongPtrW(hwnd, sys::GWLP_USERDATA, me as isize);
     }
@@ -305,9 +341,24 @@ pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
             // -1 means the call failed; treat it as a quit rather than spinning.
             break;
         }
+        // Tab, Shift+Tab, the arrows inside a radio group, Space and Esc. Handled here rather than by
+        // a dialog class because the settings window is a plain window with plain children, and this
+        // one call is the whole of what makes it keyboard-navigable. Scoped to the panel's own message
+        // queue: the overlay must never have its input run through a dialog manager, because a loop that
+        // swallowed one message while the pointer was over the clock would show up as a dropped drag.
+        let mut handled = false;
         unsafe {
-            sys::TranslateMessage(&msg);
-            sys::DispatchMessageW(&msg);
+            if !rt.host.panel.is_null()
+                && sys::GetAncestor(msg.hwnd, sys::GA_ROOT) == rt.host.panel
+            {
+                handled = sys::IsDialogMessageW(rt.host.panel, &msg) != 0;
+            }
+        }
+        if !handled {
+            unsafe {
+                sys::TranslateMessage(&msg);
+                sys::DispatchMessageW(&msg);
+            }
         }
     }
     unsafe {
@@ -316,6 +367,11 @@ pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
         sys::timeEndPeriod(1);
         if let Some(t) = rt.host.tray.as_mut() {
             t.uninstall();
+        }
+        if rt.host.settings_open() {
+            // The `Panel` the window owns is freed in its own `WM_NCDESTROY`, so it has to be destroyed
+            // while the `Runtime` it points back at is still on the stack.
+            sys::DestroyWindow(rt.host.panel);
         }
         sys::SetWindowLongPtrW(hwnd, sys::GWLP_USERDATA, 0);
         sys::DestroyWindow(hwnd);
@@ -354,11 +410,6 @@ impl Host {
     }
 
     #[must_use]
-    pub fn frame(&self) -> Rect {
-        self.frame
-    }
-
-    #[must_use]
     pub fn scale(&self) -> f64 {
         self.scale
     }
@@ -368,92 +419,13 @@ impl Host {
         self.hwnd
     }
 
-    /// Move and resize in device px. `NOACTIVATE` is not optional: any activation here would pull
-    /// focus out of the user's application on every display change.
-    pub fn set_frame(&mut self, frame: Rect) {
-        let w = frame.w().max(1.0) as i32;
-        let h = frame.h().max(1.0) as i32;
-        let (cw, ch) = self.surface.size();
-        if cw != w.max(1) as u32 || ch != h.max(1) as u32 {
-            self.surface.resize(w.max(1) as u32, h.max(1) as u32);
-        }
-        if (frame.x0 - self.frame.x0).abs() > 0.5
-            || (frame.y0 - self.frame.y0).abs() > 0.5
-            || self.frame.w() as i32 != w
-            || self.frame.h() as i32 != h
-        {
-            unsafe {
-                sys::SetWindowPos(
-                    self.hwnd,
-                    if self.topmost {
-                        sys::HWND_TOPMOST
-                    } else {
-                        sys::HWND_NOTOPMOST
-                    },
-                    frame.x0 as i32,
-                    frame.y0 as i32,
-                    w,
-                    h,
-                    sys::SWP_NOACTIVATE | sys::SWP_NOREDRAW | sys::SWP_NOOWNERZORDER,
-                );
-            }
-        }
-        self.frame = frame;
-    }
-
-    pub fn set_topmost(&mut self, topmost: bool) {
-        if self.topmost == topmost {
-            return;
-        }
-        self.topmost = topmost;
-        unsafe {
-            sys::SetWindowPos(
-                self.hwnd,
-                if topmost {
-                    sys::HWND_TOPMOST
-                } else {
-                    sys::HWND_NOTOPMOST
-                },
-                0,
-                0,
-                0,
-                0,
-                sys::SWP_NOMOVE | sys::SWP_NOSIZE | sys::SWP_NOACTIVATE | sys::SWP_NOREDRAW,
-            );
-        }
-    }
-
-    /// Whole-window input pass-through, for `click_through = "always"`. The per-pixel case is the hit
-    /// test, not this.
-    pub fn set_ignore_input(&mut self, ignore: bool) {
-        if self.ignore_input == ignore {
-            return;
-        }
-        self.ignore_input = ignore;
-        unsafe {
-            let style = sys::GetWindowLongPtrW(self.hwnd, -20); // GWL_EXSTYLE
-            let next = if ignore { style | 0x20 } else { style & !0x20 }; // WS_EX_TRANSPARENT
-            sys::SetWindowLongPtrW(self.hwnd, -20, next);
-        }
-    }
-
-    /// Show or hide. Hiding keeps the window (a `ShowWindow(SW_HIDE)` costs nothing to keep alive
-    /// and re-showing is instant), and tearing it down entirely is a Phase 2 change, recorded in
-    /// `docs/roadmap.md`; while hidden the tick timer is off, so a hidden app still costs nothing.
-    pub fn show(&mut self, visible: bool) {
-        if self.visible == visible {
-            return;
-        }
-        self.visible = visible;
-        unsafe {
-            if visible {
-                // Show without activating: `SW_SHOWNA` is the only variant that does not steal focus.
-                sys::ShowWindow(self.hwnd, sys::SW_SHOWNA);
-                sys::UpdateWindow(self.hwnd);
-            } else {
-                sys::ShowWindow(self.hwnd, sys::SW_HIDE);
-            }
-        }
+    /// `WS_EX_LAYERED` is on in every mode, because it is what the painted surface is presented
+    /// through; the difference between the two interactive modes is therefore not a style at all but
+    /// what `WM_NCHITTEST` answers, which is why this writes one bit and `HitShape::whole_window`
+    /// carries the other half.
+    #[must_use]
+    pub fn input_mode(&self) -> ClickThrough {
+        self.input
     }
 
     #[must_use]
@@ -544,6 +516,170 @@ impl Host {
     }
 }
 
+
+impl OverlayHost for Host {
+    fn set_topmost(&mut self, topmost: bool) {
+        if self.topmost == topmost {
+            return;
+        }
+        self.topmost = topmost;
+        unsafe {
+            sys::SetWindowPos(
+                self.hwnd,
+                if topmost {
+                    sys::HWND_TOPMOST
+                } else {
+                    sys::HWND_NOTOPMOST
+                },
+                0,
+                0,
+                0,
+                0,
+                sys::SWP_NOMOVE | sys::SWP_NOSIZE | sys::SWP_NOACTIVATE | sys::SWP_NOREDRAW,
+            );
+        }
+    }
+
+    fn set_frame(&mut self, frame: Rect) {
+        let w = frame.w().max(1.0) as i32;
+        let h = frame.h().max(1.0) as i32;
+        let (cw, ch) = self.surface.size();
+        if cw != w.max(1) as u32 || ch != h.max(1) as u32 {
+            self.surface.resize(w.max(1) as u32, h.max(1) as u32);
+        }
+        if (frame.x0 - self.frame.x0).abs() > 0.5
+            || (frame.y0 - self.frame.y0).abs() > 0.5
+            || self.frame.w() as i32 != w
+            || self.frame.h() as i32 != h
+        {
+            unsafe {
+                sys::SetWindowPos(
+                    self.hwnd,
+                    if self.topmost {
+                        sys::HWND_TOPMOST
+                    } else {
+                        sys::HWND_NOTOPMOST
+                    },
+                    frame.x0 as i32,
+                    frame.y0 as i32,
+                    w,
+                    h,
+                    sys::SWP_NOACTIVATE | sys::SWP_NOREDRAW | sys::SWP_NOOWNERZORDER,
+                );
+            }
+        }
+        self.frame = frame;
+    }
+
+    /// The three mouse modes are two styles, and the pair has to be written together.
+    ///
+    /// `Hover` is `WS_EX_LAYERED | WS_EX_TRANSPARENT`: layered gives the per-pixel alpha and the
+    /// per-pixel click-through the hit test answers, transparent says the window is not interested in
+    /// what it did not claim. `Solid` drops `WS_EX_TRANSPARENT` and keeps the layered surface, so every
+    /// pixel of the frame belongs to us — which is why the app's hit shape then answers `HTCLIENT` for
+    /// the whole rectangle. `Always` keeps both bits and the overlay stops being a target at all, which
+    /// is the mode the tray has to be able to undo (see `tray_present`).
+    fn set_input_mode(&mut self, mode: ClickThrough) {
+        if self.input == mode {
+            return;
+        }
+        self.input = mode;
+        unsafe {
+            let ex = sys::GetWindowLongPtrW(self.hwnd, sys::GWL_EXSTYLE);
+            let bit = sys::WS_EX_TRANSPARENT as isize;
+            let next = if mode.ignores_input() { ex | bit } else { ex & !bit };
+            if next != ex {
+                sys::SetWindowLongPtrW(self.hwnd, sys::GWL_EXSTYLE, next);
+            }
+        }
+    }
+
+    /// Show or hide. Hiding keeps the window — a `ShowWindow(SW_HIDE)` costs nothing to keep alive and
+    /// re-showing is instant — and while hidden the tick timer is off, so a hidden app still costs
+    /// nothing at all.
+    fn show(&mut self, visible: bool) {
+        if self.visible == visible {
+            return;
+        }
+        self.visible = visible;
+        unsafe {
+            if visible {
+                // Show without activating: `SW_SHOWNA` is the only variant that does not steal focus.
+                sys::ShowWindow(self.hwnd, sys::SW_SHOWNA);
+                sys::UpdateWindow(self.hwnd);
+            } else {
+                sys::ShowWindow(self.hwnd, sys::SW_HIDE);
+            }
+        }
+    }
+
+    #[must_use]
+    fn frame(&self) -> Rect {
+        self.frame
+    }
+
+    fn tray_present(&self) -> bool {
+        self.tray_installed()
+    }
+}
+
+impl Dialogs for Host {
+    /// Create the settings window, or raise the one that is already up.
+    ///
+    /// The rows arrive from the app rather than being read here, which is what keeps this crate free of
+    /// `Settings`: the backend draws what it is told and reports clicks, and never decides what a value
+    /// means.
+    fn show_settings(&mut self, groups: Vec<Group>) {
+        if self.settings_open() {
+            crate::panel::focus(self.panel);
+            self.sync_settings(&groups);
+            return;
+        }
+        let state = self.runtime;
+        let module = self.instance;
+        self.panel = unsafe { (self.open_panel)(state, module, groups) };
+    }
+
+    fn sync_settings(&mut self, groups: &[Group]) {
+        if self.settings_open() {
+            crate::panel::refresh(self.panel, groups.to_vec());
+        }
+    }
+
+    /// `IsWindow` rather than a flag, because the user closes this window with its own `x` or with Esc,
+    /// and no message of that closure reaches this struct: the handle is the state, and the only honest
+    /// question to ask it is whether it still names a window.
+    #[must_use]
+    fn settings_open(&self) -> bool {
+        !self.panel.is_null() && (unsafe { sys::IsWindow(self.panel) }) != 0
+    }
+
+    fn close_settings(&mut self) {
+        if self.settings_open() {
+            unsafe {
+                sys::DestroyWindow(self.panel);
+            }
+        }
+        self.panel = std::ptr::null_mut();
+    }
+
+    /// A modal message box, on purpose: the About text cannot change, so there is nothing to keep in
+    /// sync, and a window the user has to remember to close would be a second thing to manage.
+    fn about(&mut self, text: &str) {
+        let body = sys::wide(text);
+        let title = sys::wide("About Hanglock");
+        unsafe {
+            sys::MessageBoxW(
+                self.hwnd,
+                body.as_ptr(),
+                title.as_ptr(),
+                sys::MB_OK | sys::MB_ICONINFORMATION,
+            );
+        }
+    }
+}
+
+
 /// The one window procedure. Every branch here either translates an OS event into something the
 /// model understands, or answers a question the model can answer cheaply.
 unsafe extern "system" fn wndproc<A: AppHook + 'static>(
@@ -623,7 +759,7 @@ unsafe extern "system" fn wndproc<A: AppHook + 'static>(
             } else if mouse == sys::WM_RBUTTONUP {
                 let mut pt = sys::POINT { x: 0, y: 0 };
                 unsafe { sys::GetCursorPos(&mut pt) };
-                let st = app.menu_state();
+                let st = app.menu_state(host);
                 if let Some(cmd) = host.popup_menu((pt.x, pt.y), st) {
                     app.on_command(host, cmd);
                     host.sync_tick_timer();
@@ -658,10 +794,12 @@ unsafe fn on_pointer<A: AppHook + 'static>(
             let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
             let f = host.frame;
             let local = Vec2::new(x - f.x0, y - f.y0);
+            let shape = app.hit_shape();
             // The layered surface already lets clicks fall through fully transparent pixels;
             // answering explicitly is what makes the answer independent of anti-aliased edge
-            // coverage, which is never exactly zero.
-            Some(if app.hit_shape().contains(local) {
+            // coverage, which is never exactly zero — and it is the half of `Solid` mode that is not a
+            // window style.
+            Some(if shape.whole_window || shape.contains(local) {
                 sys::HTCLIENT
             } else {
                 sys::HTTRANSPARENT
@@ -703,10 +841,16 @@ unsafe fn on_pointer<A: AppHook + 'static>(
             host.captured = true;
             let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
             let f = host.frame;
+            // Alt is read here, at the press, and not from a modifier mask on later moves: a re-anchor
+            // has to be decided by the button-down that starts the gesture, or pressing Alt halfway
+            // through a swing would teleport the hang point to the cursor. `GetKeyState` answers for the
+            // calling thread's keyboard state, which is the thread this message arrived on.
+            let alt = (unsafe { sys::GetKeyState(sys::VK_MENU) } & sys::KEY_DOWN_MASK) != 0;
             app.on_input(
                 host,
                 Input::Press {
                     at: Vec2::new(x - f.x0, y - f.y0),
+                    alt,
                 },
             );
             Some(0)
@@ -728,7 +872,7 @@ unsafe fn on_pointer<A: AppHook + 'static>(
         sys::WM_RBUTTONUP => {
             let mut pt = sys::POINT { x: 0, y: 0 };
             unsafe { sys::GetCursorPos(&mut pt) };
-            let st = app.menu_state();
+            let st = app.menu_state(host);
             if let Some(cmd) = host.popup_menu((pt.x, pt.y), st) {
                 app.on_command(host, cmd);
                 host.sync_tick_timer();
