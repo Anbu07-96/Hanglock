@@ -168,7 +168,7 @@ impl Default for CardSpec {
             height: 156.0,
             bracket: 7.0,
             corner: 78.0,
-            hang: 84.0,
+            hang: 150.0,
         }
     }
 }

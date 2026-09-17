@@ -868,7 +868,6 @@ unsafe fn on_pointer<A: AppHook + 'static>(
             Some(0)
         }
         sys::WM_CAPTURECHANGED => {
-
             if host.captured {
                 host.captured = false;
                 app.on_input(host, Input::Release { at: Vec2::ZERO, vel: Vec2::ZERO });
