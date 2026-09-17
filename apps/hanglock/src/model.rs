@@ -1590,11 +1590,12 @@ mod tests {
     fn a_monitor_switch_keeps_the_position_and_moves_the_window() {
         let mut m = model();
         let mons = two();
+        assert_eq!(mons.len(), 2, "the test is about a machine with two displays");
         m.on_command(Command::SetMonitor(1));
         assert_eq!(m.settings.overlay.monitor_index, 1);
         // The command answers with `Relayout`; the adapter is what re-asks for the list, so the test
         // does the same rather than assuming the model already knew about display #1.
-        m.relayout(&two(), 0);
+        m.relayout(&mons, 0);
         assert_eq!(m.monitor.expect("placed").index, 1);
         assert!(
             m.layout_frame.x0 >= 1920.0 - 0.01,

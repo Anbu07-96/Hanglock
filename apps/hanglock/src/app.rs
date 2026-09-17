@@ -152,13 +152,13 @@ impl Adapter {
     /// with what the user asked for. The registry answers rather than the write's return code, because
     /// "the value is there but Task Manager has disabled it" is a state the checkbox has to show.
     fn write_autostart(&mut self, wanted: bool) {
-        let exe = match std::env::current_exe() {
-            Ok(p) => p.display().to_string(),
-            Err(_) => {
-                eprintln!("hanglock: cannot find my own executable, so autostart is unchanged");
-                return;
-            }
+        // A `let-else` rather than a `match`, because there is exactly one thing to do when the OS
+        // cannot say where we are running from: say so, and leave the registry alone.
+        let Ok(exe_path) = std::env::current_exe() else {
+            eprintln!("hanglock: cannot find my own executable, so autostart is unchanged");
+            return;
         };
+        let exe = exe_path.display().to_string();
         let got = hanglock_win::autostart::apply(&exe, wanted);
         if got != self.model.settings.general.launch_at_login {
             self.model.settings.general.launch_at_login = got;

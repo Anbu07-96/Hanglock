@@ -40,13 +40,15 @@ pub fn dir() -> PathBuf {
     base.join("Hanglock")
 }
 
-#[must_use]
-#[cfg(any(windows, test))]
-pub fn path() -> PathBuf {
-    dir().join(FILE)
-}
-
 pub const FILE: &str = "settings.toml";
+
+/// Which file inside a directory is ours. A function because `load_at`, `save_at` and the recovery path
+/// have to name the same one, and a settings document that is read from one file and written to another
+/// is a settings file that appears to be ignored.
+#[must_use]
+fn file_in(dir: &Path) -> PathBuf {
+    dir.join(FILE)
+}
 
 /// What a read found. Kept separate from the `Settings` because the app says something different for
 /// each of these, and a caller that cannot tell "no file" from "unreadable file" writes a file it
@@ -78,7 +80,7 @@ pub enum Outcome {
 /// the user's real file is somewhere else.
 #[must_use]
 pub fn load_at(dir: &Path) -> (Settings, Outcome) {
-    let p = dir.join(FILE);
+    let p = file_in(dir);
     let text = match std::fs::read_to_string(&p) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -177,7 +179,7 @@ pub fn load() -> (Settings, Outcome) {
 /// momentary lock and the second failure is a user who will never see the third.
 #[cfg(any(windows, test))]
 pub fn save_at(dir: &Path, s: &Settings) -> Result<(), String> {
-    let p = dir.join(FILE);
+    let p = file_in(dir);
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let tmp = p.with_file_name(format!("{FILE}.new"));
     let body = s.to_toml();
@@ -326,7 +328,7 @@ mod tests {
         save_at(&t.0, &Settings::default()).expect("second save");
         let left: Vec<String> = std::fs::read_dir(&t.0)
             .expect("read dir")
-            .filter_map(|e| e.ok())
+            .filter_map(Result::ok)
             .map(|e| e.file_name().to_string_lossy().to_string())
             .collect();
         assert_eq!(left, vec![FILE.to_string()], "stray files: {left:?}");
