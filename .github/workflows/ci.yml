@@ -32,7 +32,17 @@ jobs:
       - name: Clippy
         run: tools/ci/run-and-annotate.sh cargo_clippy clippy.log -- cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
-        run: tools/ci/run-and-annotate.sh cargo_test test.log -- cargo test --workspace
+        # A green run has a number worth keeping too. The per-target `test result:` lines are folded
+        # into one notice, unit and doc counts apart, so "how many tests ran" is a figure measured by the
+        # machine that ran them and not a grep of a step log that nobody can open (tools/ci/notice.py).
+        run: |
+          tools/ci/run-and-annotate.sh cargo_test test.log -- cargo test --workspace
+          awk '
+            /^ *Doc-tests / { doc = 1 }
+            /^test result:/ { if (doc) { dp += $4; df += $6 } else { up += $4; uf += $6 } }
+            END { printf "unit %d passed, %d failed | doc %d passed, %d failed\n", up, uf, dp, df }
+          ' test.log > test-summary.log
+          python3 tools/ci/notice.py "tests (linux)" test-summary.log 1
       - name: Golden trace is current
         # Two artefacts are checked in *and* generated, and both are checked here: the golden trace
         # (which `tests/golden_trace.rs` pins the solver to) and the face data (which is the reviewed
@@ -107,6 +117,18 @@ jobs:
             python tools/ci/emit.py "test ${{ matrix.arch }}" test.log
             exit 1
           }
+          # Same figure as the Linux job publishes, per architecture, so the two ABIs can be compared
+          # from the run record alone. Anything after this block runs only when the tests passed.
+          $up = 0; $uf = 0; $dp = 0; $df = 0; $doc = $false
+          foreach ($line in Get-Content test.log) {
+            if ($line -match '^\s*Doc-tests ') { $doc = $true; continue }
+            if ($line -match '^test result: \S+ (\d+) passed; (\d+) failed') {
+              if ($doc) { $dp += [int]$Matches[1]; $df += [int]$Matches[2] }
+              else { $up += [int]$Matches[1]; $uf += [int]$Matches[2] }
+            }
+          }
+          "unit $up passed, $uf failed | doc $dp passed, $df failed" | Set-Content test-summary.log
+          python tools/ci/notice.py "tests (${{ matrix.arch }})" test-summary.log 1
       - name: Build release
         run: |
           cargo build --release --target ${{ matrix.arch }} -p hanglock *> build.log
