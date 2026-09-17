@@ -1755,7 +1755,17 @@ mod tests {
                 "{forbidden:?} leaked into --diag"
             );
         }
-        assert!(text.contains("%APPDATA%\\Hanglock\\settings.toml"));
+        // Which file this is, in the spelling the store itself advertises — `%APPDATA%` on Windows,
+        // `$XDG_CONFIG_HOME` elsewhere. Asked of `display_path` rather than of a literal, because the
+        // test's subject is that `--diag` names the file it read, not which of the two it is on.
+        assert!(
+            text.contains(crate::store::display_path()),
+            "the settings file is not named"
+        );
+        assert!(
+            text.contains("settings.toml"),
+            "the name has to be the unexpanded one, marker and all"
+        );
     }
 
     #[test]

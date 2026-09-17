@@ -128,6 +128,9 @@ impl Panel {
             }
             base += k;
         }
+        // Also the answer for a panel with no rows at all: a `for` over a `RangeFrom` can run zero
+        // times, and rustc rightly refuses to assume it cannot — an empty panel must not be a panic.
+        None
     }
 }
 
