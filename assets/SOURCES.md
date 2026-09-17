@@ -88,3 +88,13 @@ These previews are deterministic companion renders of the current Concept A prod
 | `docs/previews/phase-2.5b-round/round-minimal-seconds.png` | Current face with seconds enabled. |
 | `docs/previews/phase-2.5b-round/round-minimal-rest.png` | Settled/rest composition with 24-hour time and no AM/PM. |
 | `docs/previews/phase-2.5b-round/round-minimal-swung.png` | Static angled state corresponding to a modest rope swing. |
+
+## Phase 2.5C original round-clock concept previews
+
+These concept-board PNGs are newly generated original design studies for Hanglock. They use Lucky Dangle only as a public behavior and interaction reference; they contain no Lucky Dangle code, artwork, branding, charms, or icons. They are visual previews only and are not production renderer output. Licence: CC0.
+
+| File | Concept |
+|---|---|
+| `docs/previews/phase-2.5c-round/concept-a-modern-minimal.png` | Modern minimal physical clock: compact charcoal body, fine cord, deliberate eyelet, restrained bezel and shadow. |
+| `docs/previews/phase-2.5c-round/concept-b-metal-glass.png` | Premium metal/glass clock: graphite bezel, smoked face, subtle material highlights and polished depth. |
+| `docs/previews/phase-2.5c-round/concept-c-soft-matte.png` | Soft matte compact clock: quiet matte body, smallest footprint, close shadow and low-distraction presentation. |
