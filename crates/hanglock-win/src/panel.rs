@@ -33,7 +33,7 @@
 
 use crate::sys;
 use crate::window::{AppHook, Runtime};
-use hanglock_platform::panel::{self, Control, Group, Row};
+use hanglock_platform::panel::{self, Control, Group, Row, RowId};
 
 /// The window class. Registered once per process by [`open`], tolerating the already-registered error
 /// the same way the overlay's class does.
@@ -765,10 +765,10 @@ mod tests {
         for scale in [0.5, 1.0, 1.25, 1.5, 2.0, 3.0] {
             let w = WIDTH * scale;
             for row in rows() {
-                let h = row_height(row);
+                let h = row_height(&row);
                 for (k, (part, which)) in parts(&row).iter().enumerate() {
                     let y = if *part == Part::Radio { ROW_H } else { 0.0 };
-                    let (x, top, cw, ch) = box_of(row, *part, *which, y, w, scale);
+                    let (x, top, cw, ch) = box_of(&row, *part, *which, y, w, scale);
                     assert!(cw > 0 && ch > 0, "empty control {:?}/{:?}", row.id, part);
                     assert!(x >= 0, "negative x {:?}/{:?} at {scale}", row.id, part);
                     assert!(

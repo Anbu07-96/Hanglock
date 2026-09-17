@@ -533,16 +533,22 @@ impl Model {
                 out.push(Action::PresentFull);
             }
             Command::HangUp | Command::HangDown => {
-                self.step_hang(if matches!(cmd, Command::HangUp) { 1 } else { -1 });
+                self.step_hang(if matches!(cmd, Command::HangUp) {
+                    1
+                } else {
+                    -1
+                });
                 out.push(Action::Relayout);
                 out.push(Action::Save);
             }
             Command::Bigger | Command::Smaller => {
-                let dir = if matches!(cmd, Command::Bigger) { 1.0 } else { -1.0 };
-                let next = (self.settings.overlay.scale + 0.15 * dir).clamp(
-                    limits::SCALE.0,
-                    limits::SCALE.1,
-                );
+                let dir = if matches!(cmd, Command::Bigger) {
+                    1.0
+                } else {
+                    -1.0
+                };
+                let next = (self.settings.overlay.scale + 0.15 * dir)
+                    .clamp(limits::SCALE.0, limits::SCALE.1);
                 self.settings.overlay.scale = next;
                 self.rope.card = self.settings.card();
                 out.push(Action::Relayout);
@@ -716,11 +722,7 @@ impl Model {
     /// toggle, `Reset position`, and a switch of display that a user should be able to *see*.
     fn set_visible(&mut self, on: bool) {
         self.settings.overlay.enabled = on;
-        self.state = if on {
-            State::Settled
-        } else {
-            State::Hidden
-        };
+        self.state = if on { State::Settled } else { State::Hidden };
     }
 
     /// The recovery path, written to put the clock back where a first run would have put it. It does

@@ -38,11 +38,12 @@ pub type HMODULE = *mut c_void;
 pub type HANDLE = *mut c_void;
 pub type HFONT = *mut c_void;
 
-/// The `hMenu` argument for a *child* window, which Win32 overloads as the control id. Nothing
-/// dereferences the pointer — the OS reads the number back out of it — so this is the one place in the
-/// crate that turns an integer into a pointer, and the one place that says why the lint about it is
-/// wrong here.
-#[allow(clippy::usize_as_ptr)]
+/// The `hMenu` argument for a *child* window, which Win32 overloads as the control id: nothing
+/// dereferences the pointer, because the OS reads the number back out of it. This is the one place in
+/// the crate that turns an integer into a pointer, which is why it is a named function with a comment
+/// rather than a cast at each `CreateWindowExW` call site. (Clippy grows a lint for exactly this cast in
+/// a later release than the pinned 1.77.2; when the pin moves, an `#[allow]` here will need a reason, not
+/// just a suppression.)
 #[must_use]
 pub const fn id_menu(id: usize) -> HMENU {
     id as *mut core::ffi::c_void
@@ -128,7 +129,7 @@ pub const IDOK: usize = 1;
 pub const IDCANCEL: usize = 2;
 /// `BN_CLICKED`, the `HIWORD(wParam)` of a button's `WM_COMMAND`.
 pub const BN_CLICKED: usize = 0;
-pub const VK_MENU: i16 = 0x12;
+pub const VK_MENU: i32 = 0x12;
 /// `GetKeyState`'s sign bit: "down right now", as opposed to the toggle bit, which is what Alt+Shift
 /// menus flip and is not what we ask.
 pub const KEY_DOWN_MASK: i16 = -0x8000;

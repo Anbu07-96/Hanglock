@@ -174,6 +174,10 @@ pub struct Host {
     /// a window procedure needs to know which app to call. A function pointer rather than a generic
     /// method so [`Dialogs`] can be implemented on `Host`, which is not generic.
     open_panel: crate::panel::OpenFn,
+    /// The screen cursor position at the last move message. Velocity is measured from this and not from
+    /// the message's own coordinates, which are window-local and wrap once the pointer is captured and
+    /// outside the swept box; see `WM_MOUSEMOVE`.
+    last_cursor: sys::POINT,
     /// True while the left button is held and captured, so a drag that leaves the window keeps
     /// arriving — which it must, because the pointer can outrun the swept box mid-throw and an
     /// uncaptured drag would strand the plate mid-swing with no release to end it.

@@ -221,14 +221,7 @@ impl Plan {
     /// One pickable row. `checked` is the tick, `on` whether it can be chosen at all — a row the user
     /// is not allowed to pick is still worth showing them, which is the difference between a greyed
     /// item and an absent one.
-    fn item(
-        &mut self,
-        menu: sys::HMENU,
-        label: &str,
-        cmd: Command,
-        checked: bool,
-        on: bool,
-    ) {
+    fn item(&mut self, menu: sys::HMENU, label: &str, cmd: Command, checked: bool, on: bool) {
         self.next += 1;
         let id = ID_BASE + self.next;
         let mut flags = sys::MF_STRING;
@@ -261,29 +254,65 @@ impl Plan {
         }
         self.item(menu, "Show clock", Command::ToggleVisible, st.visible, true);
         sep(menu);
-        self.item(menu, "Always on top", Command::ToggleTopmost, st.topmost, true);
+        self.item(
+            menu,
+            "Always on top",
+            Command::ToggleTopmost,
+            st.topmost,
+            true,
+        );
         let mouse = format!("Mouse: {}", st.click_through.label());
         let sub = submenu(menu, &mouse);
         if !sub.is_null() {
             for c in ClickThrough::ALL {
-                self.item(sub, c.label(), Command::SetClickThrough(c), st.click_through == c, true);
+                self.item(
+                    sub,
+                    c.label(),
+                    Command::SetClickThrough(c),
+                    st.click_through == c,
+                    true,
+                );
             }
         }
-        self.item(menu, "Show seconds", Command::ToggleSeconds, st.seconds, true);
+        self.item(
+            menu,
+            "Show seconds",
+            Command::ToggleSeconds,
+            st.seconds,
+            true,
+        );
         self.item(menu, "12-hour time", Command::Toggle12Hour, st.hour12, true);
-        self.item(menu, "AM / PM", Command::ToggleMeridiem, st.meridiem, st.hour12);
+        self.item(
+            menu,
+            "AM / PM",
+            Command::ToggleMeridiem,
+            st.meridiem,
+            st.hour12,
+        );
         let swing = format!("How it swings: {}", st.posture.label());
         let sub = submenu(menu, &swing);
         if !sub.is_null() {
             for p in PostureKind::ALL {
-                self.item(sub, p.label(), Command::SetPosture(p), st.posture == p, true);
+                self.item(
+                    sub,
+                    p.label(),
+                    Command::SetPosture(p),
+                    st.posture == p,
+                    true,
+                );
             }
         }
         let many = st.monitors.len() > 1;
         let sub = submenu(menu, "Hang from this display");
         if !sub.is_null() {
             for (index, label) in &st.monitors {
-                self.item(sub, label, Command::SetMonitor(*index), *index == st.monitor, many);
+                self.item(
+                    sub,
+                    label,
+                    Command::SetMonitor(*index),
+                    *index == st.monitor,
+                    many,
+                );
             }
         }
         sep(menu);
@@ -305,7 +334,6 @@ impl Plan {
         self.item(menu, "About Hanglock", Command::About, false, true);
         self.item(menu, "Exit Hanglock", Command::Quit, false, true);
     }
-
 }
 
 impl Drop for Tray {

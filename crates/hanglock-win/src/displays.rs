@@ -3,8 +3,6 @@
 use crate::sys;
 use hanglock_core::placement::{Monitor, Rect};
 
-/// All monitors, in device px, each with the scale the window on it should use.
-#[must_use]
 /// The display list for a caller with no window: `--diag`, which has to print the same geometry the
 /// overlay would see without creating one to ask.
 ///
