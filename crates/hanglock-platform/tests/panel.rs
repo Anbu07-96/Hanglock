@@ -211,7 +211,8 @@ fn the_cord_row_stops_at_the_ends_of_its_ladder() {
     // would change something — which at a hand-typed length means both, and at either end means one.
     let top = panel::HANG_STEPS[panel::HANG_STEPS.len() - 1];
     let bottom = panel::HANG_STEPS[0];
-    let nudges = |hang: f64| {
+    // `mut` because the closure rewrites the shared settings before reading the row back.
+    let mut nudges = |hang: f64| {
         s.overlay.hang = hang;
         match control(&s, RowId::HangLength) {
             Control::Nudge {
