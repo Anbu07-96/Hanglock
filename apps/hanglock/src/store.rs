@@ -365,10 +365,11 @@ mod tests {
         assert_eq!(outcome, Outcome::Loaded, "not a corruption event");
         assert_eq!(s.overlay.hang, 230.0);
         assert_eq!(s.overlay.scale, 1.15);
-        assert!(
-            s.face.hour12,
-            "`no` is not a boolean, so the default stands"
-        );
+        // Not "ignored, default stands": the reader's boolean set is deliberately wider than TOML's so
+        // that `yes` and `on` work in a hand-edited file, and the price of a wide true-list is that every
+        // other word is false. `hour12 = n0` will therefore read as 24-hour rather than be refused, which
+        // is why the settings *window* is the way to change this and not a text box.
+        assert!(!s.face.hour12, "`no` is one of the false words");
         assert_eq!(
             s.general.fps_cap, 60,
             "the missing section took its default, not a reset"
@@ -377,6 +378,34 @@ mod tests {
             t.0.join(FILE).exists(),
             "the file is the user's; it stays where it is"
         );
+    }
+
+    #[test]
+    fn a_value_that_is_not_a_number_leaves_that_key_at_its_own_default() {
+        // The other half of "tolerant": a number that cannot be parsed does not fail the load and does
+        // not zero the field, it falls back to the value the key would have had anyway, and every other
+        // key in the file is still read. A half-written file must not cost the user the whole file.
+        let t = Tmp::new("junk-numbers");
+        t.write(
+            "[overlay]
+opacity = 9abc
+scale = 1.4
+click_through = sideways
+
+[general]
+fps_cap = lots
+",
+        );
+        let (s, outcome) = load_at(&t.0);
+        assert_eq!(outcome, Outcome::Loaded, "junk is not corruption");
+        assert_eq!(s.overlay.opacity, 1.0, "unparseable: the key's own fallback");
+        assert_eq!(s.overlay.scale, 1.4, "the line beside it still landed");
+        assert_eq!(
+            s.overlay.click_through,
+            hanglock_core::ids::ClickThrough::default(),
+            "an unknown enum word is the default mode, not a random one"
+        );
+        assert_eq!(s.general.fps_cap, 60);
     }
 
     #[test]

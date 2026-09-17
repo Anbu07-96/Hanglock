@@ -142,6 +142,11 @@ pub struct Model {
     pub theme: Theme,
     pub state: State,
     pub text: FaceText,
+    /// The wall time the face was last *given*, which is what a settings change reformats. It cannot be
+    /// read back out of `text`: a displayed `10 PM` is 22, and the seconds are not on screen at all, so
+    /// parsing the digits would turn a 24-hour switch into 10 and a seconds toggle into `:00` — both
+    /// wrong until the next minute, which is a long time to be a broken clock.
+    pub shown: (u32, u32, u32, u32, u32, u32),
     pub layout_frame: Rect,
     pub layout_scale: f64,
     pub monitor: Option<Monitor>,
@@ -204,9 +209,13 @@ impl Model {
             Vec2::new(0.0, 0.0),
             1.0,
         );
-        let text = face_of(&settings, (2026, 1, 1, 10, 42, 7));
+        // Ten past ten, seven seconds in: a time at which "seconds on" and "seconds off" are visibly
+        // different, which is what `--dump-scene` and the tests need the first frame to show.
+        let shown = (2026u32, 1, 1, 10, 42, 7);
+        let text = face_of(&settings, shown);
         Self {
             settings,
+            shown,
             rope,
             canvas: Canvas::new(1, 1),
             theme,
@@ -328,6 +337,10 @@ impl Model {
 
     /// The 1 Hz timer. The only wake the steady state of a clock ever needs.
     pub fn on_second(&mut self, fields: (u32, u32, u32, u32, u32, u32)) -> Vec<Action> {
+        // Recorded even when the minute changed nothing visible, because a *format* command that lands
+        // between two ticks should use the newest time the app was told about, not the last one that
+        // happened to change the picture.
+        self.shown = fields;
         if self.state == State::Hidden {
             return Vec::new();
         }
@@ -589,9 +602,9 @@ impl Model {
                 out.push(Action::Quit(0));
             }
         }
-        // Re-derive the text now, so a toggle of seconds shows on the very next present instead of
-        // up to a second later: the user's action is the interesting frame, not the minute boundary.
-        self.text = face_of(&self.settings, current_fields_from(&self.text));
+        // Re-derive the text now from `shown`, so a toggle of seconds or of 12/24 shows on the very
+        // next present instead of up to a minute later: the user's action is the interesting frame.
+        self.text = face_of(&self.settings, self.shown);
         out
     }
 
@@ -811,24 +824,6 @@ fn face_of(s: &Settings, fields: (u32, u32, u32, u32, u32, u32)) -> FaceText {
     )
 }
 
-/// `on_command` needs to reformat with the same wall time it last displayed; the fields are not
-/// worth threading through every command, and a command landing between two seconds displaying the
-/// previous second for one frame is invisible and self-correcting.
-fn current_fields_from(t: &FaceText) -> (u32, u32, u32, u32, u32, u32) {
-    let s = t.as_str();
-    let mut chars = s.chars();
-    let dig = |c: &mut std::str::Chars<'_>| -> u32 {
-        let a = c.next().and_then(|x| x.to_digit(10)).unwrap_or(0);
-        let b = c.next().and_then(|x| x.to_digit(10)).unwrap_or(0);
-        a * 10 + b
-    };
-    let h = dig(&mut chars);
-    if chars.next() != Some(':') {
-        return (2026, 1, 1, h, 0, 0);
-    }
-    let mi = dig(&mut chars);
-    (2026, 1, 1, h, mi, 0)
-}
 
 // ---------------------------------------------------------------------------------------------
 // headless modes
@@ -1590,7 +1585,11 @@ mod tests {
     fn a_monitor_switch_keeps_the_position_and_moves_the_window() {
         let mut m = model();
         let mons = two();
-        assert_eq!(mons.len(), 2, "the test is about a machine with two displays");
+        assert_eq!(
+            mons.len(),
+            2,
+            "the test is about a machine with two displays"
+        );
         m.on_command(Command::SetMonitor(1));
         assert_eq!(m.settings.overlay.monitor_index, 1);
         // The command answers with `Relayout`; the adapter is what re-asks for the list, so the test
