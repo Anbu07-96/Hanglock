@@ -8,16 +8,19 @@ isn't drawn, and near-zero cost while you ignore it.
 overlay, the tray, the settings store. Phase 2 made it usable: the hang point is now a pair of numbers
 the file can hold and Alt+drag can move, the mouse has three named modes with a refusal built into one of
 them, the tray grew into the control surface, and a small native settings window draws the rows the
-model derives. There are 110 `#[test]` functions in the workspace plus the 10 doc tests — counted with
-`git ls-files '*.rs' | xargs grep -c '^[[:space:]]*#\[test\]'` rather than remembered — and every number
-in these pages is measured off the tree or off a CI run for the same reason.
+model derives. There are 111 `#[test]` functions in the workspace and no doc tests — counted with
+`git ls-files '*.rs' | xargs grep -c '^[[:space:]]*#\[test\]'` rather than remembered, and CI now
+publishes what it ran: `unit 104 passed` on Linux and `unit 111 passed` on each Windows ABI, the difference
+being the seven tests that only compile under `cfg(windows)`. Every number in these pages is measured off the
+tree or off a CI run for the same reason; the sentence here that once claimed "10 doc tests" was neither, and
+`docs/reports/phase-2.md` §8 says so out loud instead of correcting itself quietly.
 
 CI's three jobs cover Linux, Windows `x64` and Windows `arm64`: fmt and clippy `-D warnings`, the suite
 including the golden trace, both generated artefacts against their generators, and on Windows the release
 link, a headless run of the binary and a 2 048 KB size gate. The gate was met at 312 KB (`x64`) /
-271 KB (`arm64`) by `9dcf3b9`, Phase 1's green run; the Phase 2 commits changed the code those numbers
-describe and their runs have not been read back yet (the sandbox's GitHub credentials expired mid-phase),
-so [`reports/phase-2.md`](reports/phase-2.md) carries the blank columns rather than an estimate. The
+271 KB (`arm64`) by `9dcf3b9`, Phase 1's green run, and Phase 2's code moved that to 355 KB / 308 KB at
+`dbf9cba`, where all three jobs are green and
+[`reports/phase-2.md`](reports/phase-2.md) carries the numbers a run measured. The
 zero-dependency rule that keeps the sizes cheap to hold is
 [ADR-0002](decisions/0002-zero-dependencies.md). Anything that needs a desktop is owed, and listed as
 owed in [`gate-a.md`](gate-a.md); read [`reports/phase-1.md`](reports/phase-1.md) and
