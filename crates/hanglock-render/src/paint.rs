@@ -181,7 +181,9 @@ fn digital_layout(scene: &Scene, theme: &Theme) -> DigitalLayout {
         0.0
     };
     let units = (main_units + suffix_units + gap_ratio).max(1.0);
-    let cap = (scene.card_h * theme.time_cap).min(radius * 0.58).min(radius * 1.45 / units);
+    let cap = (scene.card_h * theme.time_cap)
+        .min(radius * 0.58)
+        .min(radius * 1.45 / units);
     let main_width = main_units * cap;
     let gap = gap_ratio * cap;
     let suffix_width = suffix_units * cap;
