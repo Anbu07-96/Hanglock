@@ -17,26 +17,64 @@
 
 #![forbid(unsafe_code)]
 
+pub mod panel;
+
+use hanglock_core::anchor::Anchor;
+use hanglock_core::ids::{ClickThrough, PostureKind};
 use hanglock_core::placement::{Monitor, Rect};
 use hanglock_core::vec2::Vec2;
 
 /// Everything the user can ask for from outside the overlay. One enum, because the tray menu, the
-/// card's context menu and (later) a settings window all offer the same commands and must not be
-/// able to disagree about what exists.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// card's context menu and the settings window all offer the same commands and must not be able to
+/// disagree about what exists — which is also why it carries values (`SetAnchor`, `SetClickThrough`)
+/// rather than only toggles: a window with radio buttons needs to *set*, and inventing a second
+/// vocabulary for it is how two surfaces drift.
+///
+/// Every command is one user intent, so the model can answer any of them without knowing which one
+/// it was asked for; none of them is "the settings changed", which would hand the window the job of
+/// deciding what is valid.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
     ToggleVisible,
     ToggleTopmost,
     ToggleSeconds,
     Toggle12Hour,
-    SetPosture(hanglock_core::ids::PostureKind),
+    ToggleMeridiem,
+    SetPosture(PostureKind),
+    SetClickThrough(ClickThrough),
+    /// Which display to hang from, by the index the settings file stores — not the position in a
+    /// list, which changes when a monitor is unplugged.
+    SetMonitor(u32),
+    /// The hang point, as the document holds it: a ratio and a drop, both validated on arrival.
+    SetAnchor(Anchor),
     HangUp,
     HangDown,
     Bigger,
     Smaller,
+    /// Put the clock back at the top centre of the display it is on, and make it visible. The
+    /// recovery path for a clock that has been moved somewhere the user cannot click.
     ResetPosition,
+    /// `launch_at_login`, applied: the model records the wish and the platform writes the registry.
+    ToggleLaunchAtLogin,
+    /// Bring up the settings window, or focus the one that is already up.
+    OpenSettings,
+    /// The one-paragraph "what is this, and how do I get out of it" box.
+    About,
     Diagnostics,
     Quit,
+}
+
+impl Command {
+    /// Whether this command needs the overlay to answer the mouse. The tray marks the ones that do not
+    /// as available even in `click_through = "always"`; the menu is not allowed to offer an item that
+    /// silently does nothing, because that is the moment a user stops trusting it.
+    #[must_use]
+    pub fn needs_clickable_overlay(self) -> bool {
+        matches!(
+            self,
+            Self::SetAnchor(_) | Self::ResetPosition | Self::HangUp | Self::HangDown
+        )
+    }
 }
 
 /// Pointer and wheel input, already converted into the overlay's own device-pixel space.
@@ -44,8 +82,14 @@ pub enum Command {
 pub enum Input {
     /// Left button down at a point. The host decides whether that point is on the object; the
     /// model's answer is `Rope::begin_drag`'s return value.
+    ///
+    /// `alt` is whether Alt was down *at the press*, not whether it is down now: re-anchoring is
+    /// latched for the whole gesture, so a user who releases Alt mid-drag keeps moving the hang point
+    /// rather than having the clock snap back into swinging under their hand. Alt is held down long
+    /// before the button is, which is what makes a press-time sample the readable one.
     Press {
         at: Vec2,
+        alt: bool,
     },
     Move {
         at: Vec2,
@@ -104,6 +148,32 @@ pub trait OverlayHost {
     fn show(&mut self, visible: bool);
     #[must_use]
     fn frame(&self) -> Rect;
+    /// Whether the tray icon is up. The only way out of `click_through = "always"` is a control the
+    /// overlay cannot swallow, so the model refuses that mode when this answers `false` rather than
+    /// trusting a user to find the settings file.
+    #[must_use]
+    fn tray_present(&self) -> bool;
+}
+
+/// The two windows a user can be shown that are not the overlay: the settings form and the About
+/// box. Kept as a trait for the same reason as `Tray` — a second platform will build these from
+/// different parts, and the model must not be able to notice.
+///
+/// A window that could *write* settings would need its own validation, its own undo, and its own
+/// story for what happens when the app quits while it is open. These cannot: they are given rows to
+/// draw and hand back a `Command`, so closing them is never part of applying anything.
+pub trait Dialogs {
+    /// Draw these rows, bringing the window up or refocusing the one already up.
+    fn show_settings(&mut self, groups: Vec<panel::Group>);
+    /// Replace the rows if the window is open; do nothing otherwise. Called after every command the
+    /// model answers, which is what keeps the checkboxes honest without the window polling anything.
+    fn sync_settings(&mut self, groups: &[panel::Group]);
+    #[must_use]
+    fn settings_open(&self) -> bool;
+    fn close_settings(&mut self);
+    /// The About box, with the words the model supplies. Blocks, on platforms where that is what a
+    /// message box does.
+    fn about(&mut self, text: &str);
 }
 
 /// The system tray. Menus are built by the host because a native menu is the only one worth having;

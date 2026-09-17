@@ -120,8 +120,13 @@ fn posture_and_click_through_names_round_trip() {
     ] {
         assert_eq!(PostureKind::parse(p.as_str()), Some(p));
     }
-    for c in [ClickThrough::Hover, ClickThrough::Always] {
-        assert_eq!(ClickThrough::parse(c.as_str()), Some(c));
+    for c in ClickThrough::ALL {
+        assert_eq!(
+            ClickThrough::parse(c.as_str()),
+            Some(c),
+            "{} did not survive its own name",
+            c.as_str()
+        );
     }
     assert_eq!(
         PostureKind::parse("Plate"),
@@ -144,4 +149,84 @@ fn sanitize_is_idempotent_and_total() {
         "NaN must not survive the boundary"
     );
     assert_eq!(s.overlay.anchor_ratio, 0.0);
+}
+
+/// The two numbers that say where the clock hangs are the ones a user's drag writes, so they must
+/// survive the file exactly — and `anchor_drop` must not be able to corrupt `anchor_ratio` by sharing
+/// its line in the writer.
+#[test]
+fn the_anchor_pair_round_trips_through_the_document() {
+    let mut s = Settings::default();
+    s.overlay.anchor_ratio = 0.375;
+    s.overlay.anchor_drop = 96.0;
+    let (back, w) = Settings::from_toml(&s.to_toml());
+    assert!(w.is_empty(), "a document we wrote complained: {w:?}");
+    assert_eq!(back, s);
+    assert!(
+        s.to_toml().contains("anchor_drop = 96\n"),
+        "the key is written under the name it is read as:\n{}",
+        s.to_toml()
+    );
+}
+
+/// The additive-field test, for the field this release added: a file written before `anchor_drop`
+/// existed loads, takes 0.0 for it, and keeps everything it did mention.
+#[test]
+fn a_document_from_before_the_drop_existed_still_loads() {
+    let old = "schema = 1\n\n[overlay]\nanchor_ratio = 0.8\nhang = 210\nclick_through = \"always\"\n";
+    let (s, w) = Settings::from_toml(old);
+    assert!(w.is_empty(), "{w:?}");
+    assert_eq!(s.overlay.anchor_ratio, 0.8);
+    assert_eq!(
+        s.overlay.anchor_drop, 0.0,
+        "no key means the top of the display, which is what such a file described"
+    );
+    assert_eq!(s.overlay.hang, 210.0);
+    assert_eq!(s.overlay.click_through, ClickThrough::Always);
+}
+
+#[test]
+fn a_drop_outside_the_reach_is_clamped_to_it() {
+    use hanglock_core::settings::limits;
+    let (s, _) = Settings::from_toml("[overlay]\nanchor_drop = -20\n");
+    assert_eq!(s.overlay.anchor_drop, limits::ANCHOR_DROP.0);
+    let (far, _) = Settings::from_toml("[overlay]\nanchor_drop = 1e9\n");
+    assert_eq!(far.overlay.anchor_drop, limits::ANCHOR_DROP.1);
+    let (nan, _) = Settings::from_toml("[overlay]\nanchor_drop = nan\nanchor_ratio = nan\n");
+    assert_eq!(
+        nan.overlay.anchor_drop,
+        0.0,
+        "a NaN drop is repaired, not clamped into one"
+    );
+    assert_eq!(nan.overlay.anchor_ratio, 0.5, "and so is a NaN ratio");
+}
+
+/// The labels are what a user reads to decide which mode to click, so they have to be three different
+/// sentences — and each one has to say what the desktop will do, because that is the thing being given
+/// up. This is the only place the words are pinned, which is the point of putting them in the core.
+#[test]
+fn the_three_mouse_modes_are_named_differently_from_each_other() {
+    let names: Vec<&str> = ClickThrough::ALL.iter().map(|c| c.label()).collect();
+    for (i, a) in names.iter().enumerate() {
+        assert!(!a.is_empty(), "{a:?} has no label");
+        for b in names.iter().skip(i + 1) {
+            assert_ne!(a, b, "two modes share the words \"{a}\"");
+        }
+    }
+    assert!(
+        ClickThrough::Solid.label().contains("whole window"),
+        "the mode that claims the rectangle has to say so: {}",
+        ClickThrough::Solid.label()
+    );
+    assert!(
+        ClickThrough::Always.label().starts_with("Fully"),
+        "and the one that claims nothing has to say that too: {}",
+        ClickThrough::Always.label()
+    );
+    let postures: Vec<&str> = PostureKind::ALL.iter().map(|p| p.label()).collect();
+    assert_eq!(
+        postures.len(),
+        4,
+        "every posture is offered in both surfaces, in the same order"
+    );
 }

@@ -93,6 +93,13 @@ pub struct Placement {
     pub clipped: bool,
 }
 
+/// The least distance, in logical px, between the top of a display and the hang point.
+///
+/// The clamp the cord runs through is drawn *at* the anchor, a few px above it, so an anchor parked
+/// on the edge would have its hardware cut off. This is also the inset a first run uses — the drop
+/// in [`crate::settings::Overlay::anchor_drop`] is measured from the hang line on top of it.
+pub const ANCHOR_INSET: f64 = 14.0;
+
 /// The area the object can occupy while swinging, in logical px, relative to the anchor.
 ///
 /// The window is this box — not a circle, and not a guess — because the sector stop in
@@ -104,16 +111,37 @@ pub fn swept_box(cfg: &RopeConfig, card: &CardSpec, hang: f64, margin: f64, scal
     let s = scale.max(0.01);
     let r = hang * s;
     let half_w = r * cfg.sweep_deg.to_radians().sin() + card.width * 0.5 * s + margin;
-    let top = card.bracket * s + 14.0 * s + margin;
+    let top = card.bracket * s + ANCHOR_INSET * s + margin;
     let bottom = r + card.height * 0.5 * s + margin * 2.0;
     Rect::new(-half_w, -top, half_w, bottom)
 }
 
-/// Place the overlay on `m`, hanging at `anchor_ratio` along the top of the usable width.
+/// The line a clock on `m` hangs from, in logical px: the physical top of the display, unless a
+/// top-docked taskbar should be avoided, in which case the top of the work area.
 ///
-/// `anchor_ratio` (0..=1) rather than an absolute x: a ratio survives the resolution and scale
-/// changes that happen while the app is running, which is what makes a re-anchor after
+/// Its own function because the anchor's allowed band is measured from this line, and an anchor
+/// maths that assumed its own hang line is how a saved position and a placed window stop agreeing.
+#[must_use]
+pub fn hang_line(m: &Monitor, respect_taskbar: bool) -> f64 {
+    let bounds = m.bounds_logical();
+    if respect_taskbar && m.taskbar_top && !m.taskbar_auto_hidden {
+        m.work_logical().y0.max(bounds.y0)
+    } else {
+        bounds.y0
+    }
+}
+
+/// Place the overlay on `m`, hanging at `anchor_ratio` along the top of the usable width and
+/// `anchor_drop` below the line the clock hangs from.
+///
+/// Both are in logical px (one of them a ratio) rather than coordinates: they survive the resolution
+/// and scale changes that happen while the app is running, which is what makes a re-anchor after
 /// `WM_DPICHANGED` land where the user put it instead of at the left edge.
+///
+/// The anchor is the primary quantity and the frame is derived from it, so a drag of one px moves
+/// the clock one px with no dead band at the top of the display; the frame is then clamped into the
+/// display, which is what stops an Alt-drag pushing a corner of the window onto a second monitor
+/// that has not been asked for.
 #[must_use]
 pub fn place(
     m: &Monitor,
@@ -122,6 +150,7 @@ pub fn place(
     hang: f64,
     scale_mult: f64,
     anchor_ratio: f64,
+    anchor_drop: f64,
     margin: f64,
     respect_taskbar: bool,
 ) -> Placement {
@@ -131,18 +160,19 @@ pub fn place(
     let box_logical = swept_box(cfg, card, hang, margin, scale_mult);
     let size = Vec2::new(box_logical.w(), box_logical.h());
 
-    // The hang line: the physical top of the display, unless a top-docked taskbar should be
-    // avoided, in which case the top of the work area.
-    let hang_y = if respect_taskbar && m.taskbar_top && !m.taskbar_auto_hidden {
-        work.y0.max(bounds.y0)
-    } else {
-        bounds.y0
-    };
+    let hang_y = hang_line(m, respect_taskbar);
 
     let usable = if respect_taskbar { work } else { bounds };
     let centre_x = usable.x0 + usable.w() * anchor_ratio.clamp(0.0, 1.0);
     let mut x0 = centre_x - size.x * 0.5;
-    let mut y0 = hang_y - (-box_logical.y0);
+    let top_extent = -box_logical.y0;
+    // The hang point itself, before the frame is placed: on the hang line, below it by however far
+    // the user dropped it, and never so close to the top that the clamp is off screen.
+    let anchor_y = (hang_y + anchor_drop.max(0.0))
+        .max(hang_y)
+        .max(bounds.y0 + ANCHOR_INSET)
+        .min((bounds.y1 - ANCHOR_INSET).max(bounds.y0 + ANCHOR_INSET));
+    let mut y0 = anchor_y - top_extent;
     let mut clipped = false;
 
     if size.x <= bounds.w() {
@@ -160,11 +190,19 @@ pub fn place(
         y0 = bounds.y0;
         clipped = true;
     }
+    // The hang point is the one thing that may never leave the display: an anchor that is off screen
+    // has no gesture that brings it back, and the settings file is the only way to fix it. Both bounds
+    // here are satisfiable because `anchor_y` is itself kept `ANCHOR_INSET` inside the display, and
+    // because the box is taller than the inset — so `clamp` cannot be handed an inverted range.
+    y0 = y0.clamp(anchor_y - size.y, anchor_y - ANCHOR_INSET);
 
     let frame = Rect::new(x0, y0, x0 + size.x, y0 + size.y);
     Placement {
         frame: frame.scaled(s),
-        anchor: Vec2::new(-box_logical.x0, -box_logical.y0).scale(s),
+        // Frame-local, and measured from the *placed* top — so it says where the hang point ended up
+        // once the frame was pulled on screen, which is not where the box wanted it if the clock was
+        // clamped against an edge. The overlay paints and drags from this, never from its own guess.
+        anchor: Vec2::new(-box_logical.x0, anchor_y - y0).scale(s),
         size_logical: size,
         scale: s,
         clipped,

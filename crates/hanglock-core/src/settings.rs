@@ -26,6 +26,10 @@ pub mod limits {
     pub const SCALE: (f64, f64) = (0.75, 1.75);
     pub const OPACITY: (f64, f64) = (0.35, 1.0);
     pub const ANCHOR_RATIO: (f64, f64) = (0.0, 1.0);
+    /// How far below the line a clock hangs the hang point may be moved, in logical px. The upper
+    /// bound is a *reach*, not a suggestion, and the placement maths is what keeps the clock on a
+    /// screen — so a 4k panel has to be able to hold a 4k drop.
+    pub const ANCHOR_DROP: (f64, f64) = (0.0, 4096.0);
     pub const FPS_CAP: (u32, u32) = (24, 120);
     pub const MARGIN: (f64, f64) = (4.0, 48.0);
 }
@@ -37,6 +41,10 @@ pub struct Overlay {
     /// 0 = left edge of the usable width, 1 = right edge. A ratio, not a pixel, so it survives a
     /// resolution or scale change.
     pub anchor_ratio: f64,
+    /// Logical px below the line the clock hangs from: the other half of the same idea, and likewise
+    /// a distance rather than a coordinate. `0` means "hung from the edge", which is where a first
+    /// run puts the clock and what every file written before this key existed holds.
+    pub anchor_drop: f64,
     pub hang: f64,
     pub scale: f64,
     pub opacity: f64,
@@ -76,6 +84,7 @@ impl Default for Settings {
                 enabled: true,
                 monitor_index: 0,
                 anchor_ratio: 0.5,
+                anchor_drop: 0.0,
                 hang: 150.0,
                 scale: 1.0,
                 opacity: 1.0,
@@ -99,6 +108,32 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// The card the document asks for: the design size with the user's multiplier applied, and the
+    /// cord length they chose.
+    ///
+    /// One function, because the painter, the solver and the placement maths must all be told the same
+    /// size. A second place that multiplies by `overlay.scale` is how a clock ends up drawn at one size
+    /// and clickable at another, and a place that forgets it is a clock whose plate is the right size
+    /// but whose cord is too short for it.
+    #[must_use]
+    pub fn card(&self) -> crate::rope::config::CardSpec {
+        let base = crate::rope::config::CardSpec::default();
+        let k = self.overlay.scale;
+        crate::rope::config::CardSpec {
+            width: base.width * k,
+            height: base.height * k,
+            bracket: base.bracket,
+            corner: base.corner,
+            hang: self.overlay.hang,
+        }
+    }
+
+    /// Where the clock hangs from, as the pair of numbers the document holds.
+    #[must_use]
+    pub fn anchor(&self) -> crate::anchor::Anchor {
+        crate::anchor::Anchor::from_overlay(&self.overlay)
+    }
+
     /// Pull every ranged value back inside its limits. Called after parsing, so the rest of the app
     /// can assume the document is valid and never re-check.
     pub fn sanitize(&mut self) {
@@ -111,6 +146,8 @@ impl Settings {
         // which is the argument for having them.
         o.anchor_ratio = finite(o.anchor_ratio, d.overlay.anchor_ratio)
             .clamp(limits::ANCHOR_RATIO.0, limits::ANCHOR_RATIO.1);
+        o.anchor_drop = finite(o.anchor_drop, d.overlay.anchor_drop)
+            .clamp(limits::ANCHOR_DROP.0, limits::ANCHOR_DROP.1);
         o.hang = finite(o.hang, d.overlay.hang).clamp(limits::HANG.0, limits::HANG.1);
         o.scale = finite(o.scale, d.overlay.scale).clamp(limits::SCALE.0, limits::SCALE.1);
         o.opacity =
@@ -135,6 +172,10 @@ impl Settings {
         s.push_str(&format!(
             "anchor_ratio = {}\n",
             fix(self.overlay.anchor_ratio)
+        ));
+        s.push_str(&format!(
+            "anchor_drop = {}\n",
+            fix(self.overlay.anchor_drop)
         ));
         s.push_str(&format!("hang = {}\n", fix(self.overlay.hang)));
         s.push_str(&format!("scale = {}\n", fix(self.overlay.scale)));
@@ -196,6 +237,7 @@ impl Settings {
                     out.overlay.monitor_index = int_of(value, 0).max(0) as u32;
                 }
                 ("overlay", "anchor_ratio") => out.overlay.anchor_ratio = float_of(value, 0.5),
+                ("overlay", "anchor_drop") => out.overlay.anchor_drop = float_of(value, 0.0),
                 ("overlay", "hang") => out.overlay.hang = float_of(value, 150.0),
                 ("overlay", "scale") => out.overlay.scale = float_of(value, 1.0),
                 ("overlay", "opacity") => out.overlay.opacity = float_of(value, 1.0),

@@ -15,8 +15,10 @@
 
 #![forbid(unsafe_code)]
 
+pub mod anchor;
 pub mod clock;
 pub mod ids;
+pub mod panel;
 pub mod placement;
 pub mod rope;
 pub mod scene;

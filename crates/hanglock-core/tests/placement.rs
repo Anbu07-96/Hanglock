@@ -23,7 +23,7 @@ fn cfg() -> (RopeConfig, CardSpec) {
 fn hangs_from_the_top_of_the_monitor_it_is_on() {
     let (c, card) = cfg();
     let mon = m(0, 0.0, 0.0, 1920.0, 1080.0, 1.0);
-    let p = place(&mon, &c, &card, 150.0, 1.0, 0.5, 16.0, true);
+    let p = place(&mon, &c, &card, 150.0, 1.0, 0.5, 0.0, 16.0, true);
     // Top edge: the frame's top is the display's top, not the work area's, because the taskbar is at
     // the bottom here and a hanging object belongs at the physical edge.
     assert_eq!(p.frame.y0, 0.0);
@@ -45,7 +45,7 @@ fn hangs_from_the_top_of_the_monitor_it_is_on() {
 fn a_monitor_left_of_the_primary_has_a_negative_origin() {
     let (c, card) = cfg();
     let left = m(1, -1920.0, 0.0, 1920.0, 1080.0, 1.0);
-    let p = place(&left, &c, &card, 150.0, 1.0, 0.5, 16.0, true);
+    let p = place(&left, &c, &card, 150.0, 1.0, 0.5, 0.0, 16.0, true);
     let centre = p.frame.x0 + p.frame.w() * 0.5;
     assert!(
         (centre - (-960.0)).abs() < 1.0,
@@ -67,7 +67,7 @@ fn a_monitor_left_of_the_primary_has_a_negative_origin() {
 fn mixed_dpi_monitors_scale_the_frame_but_not_the_geometry() {
     let (c, card) = cfg();
     let mon = m(0, 0.0, 0.0, 1920.0, 1080.0, 2.0);
-    let p = place(&mon, &c, &card, 150.0, 1.0, 0.5, 16.0, true);
+    let p = place(&mon, &c, &card, 150.0, 1.0, 0.5, 0.0, 16.0, true);
     let logical = swept_box(&c, &card, 150.0, 16.0, 1.0);
     assert!(
         (p.frame.w() - logical.w() * 2.0).abs() < 1.0,
@@ -86,8 +86,8 @@ fn a_top_docked_taskbar_pushes_the_hang_line_down_when_respected() {
     mon.taskbar_top = true;
     // 48 px of taskbar at the top: work area starts below it.
     mon.work = Rect::new(0.0, 48.0, 1920.0, 1080.0);
-    let respected = place(&mon, &c, &card, 150.0, 1.0, 0.5, 16.0, true);
-    let over = place(&mon, &c, &card, 150.0, 1.0, 0.5, 16.0, false);
+    let respected = place(&mon, &c, &card, 150.0, 1.0, 0.5, 0.0, 16.0, true);
+    let over = place(&mon, &c, &card, 150.0, 1.0, 0.5, 0.0, 16.0, false);
     // The hang line is the anchor, not the frame's top edge. The frame starts one top margin above
     // the anchor, and is then clamped inside the display, so comparing `frame.y0` values measures
     // that margin (39 px here) rather than the rule — which is why this assertion asked for 30 px
@@ -112,7 +112,7 @@ fn a_top_docked_taskbar_pushes_the_hang_line_down_when_respected() {
 fn an_overlay_wider_than_the_display_centres_instead_of_failing() {
     let (c, card) = cfg();
     let tiny = m(0, 0.0, 0.0, 400.0, 300.0, 1.0);
-    let p = place(&tiny, &c, &card, 260.0, 1.75, 0.5, 16.0, true);
+    let p = place(&tiny, &c, &card, 260.0, 1.75, 0.5, 0.0, 16.0, true);
     assert!(
         p.clipped,
         "must report that the sweep is clipped, for diagnostics"
@@ -181,4 +181,77 @@ fn rect_helpers() {
         !r.contains(hanglock_core::vec2::Vec2::new(110.0, 60.0)),
         "half-open: right/bottom excluded"
     );
+}
+
+/// The drop is the other half of the hang point, and the frame is derived *from* it rather than the
+/// other way round: that is what makes an Alt-drag move the clock one pixel per pixel of cursor with
+/// no dead band at the top of the screen.
+#[test]
+fn a_drop_moves_the_hang_point_down_one_logical_px_per_px() {
+    let (c, card) = cfg();
+    let mon = m(0, 0.0, 0.0, 1920.0, 1080.0, 1.0);
+    let line = |drop: f64| {
+        let p = place(&mon, &c, &card, 150.0, 1.0, 0.5, drop, 16.0, true);
+        p.frame.y0 + p.anchor.y
+    };
+    // Zero is "as high as the display allows", which is the clamp's own inset, not the edge: the
+    // hardware the cord runs through would otherwise be cut off.
+    assert!((line(0.0) - 14.0).abs() < 1e-9, "at the inset: {}", line(0.0));
+    for drop in [40.0, 100.0, 250.0] {
+        let got = line(drop);
+        assert!(
+            (got - drop).abs() < 1e-9,
+            "drop {drop} placed the hang point at {got}"
+        );
+    }
+}
+
+#[test]
+fn a_drop_leaves_the_frame_inside_the_display_and_the_swing_inside_the_frame() {
+    let (c, card) = cfg();
+    let mon = m(0, 0.0, 0.0, 1920.0, 1080.0, 1.0);
+    let box_logical = swept_box(&c, &card, 150.0, 16.0, 1.0);
+    for drop in [0.0, 17.5, 100.0, 600.0] {
+        let p = place(&mon, &c, &card, 150.0, 1.0, 0.5, drop, 16.0, true);
+        let anchor_y = p.frame.y0 + p.anchor.y;
+        assert!(
+            p.frame.y0 >= -0.001 && p.frame.y1 <= 1080.0 + 0.001,
+            "drop {drop} put the frame at {:?}",
+            p.frame
+        );
+        // The bottom of the swept box, measured from the anchor: the plate at full stretch, plus its
+        // shadow. If the frame's bottom came above this, the swing would be cut off in the window.
+        let swing_bottom = anchor_y + box_logical.y1;
+        assert!(
+            p.frame.y1 >= swing_bottom - 0.001,
+            "drop {drop}: frame bottom {} is above the swing's {}",
+            p.frame.y1,
+            swing_bottom
+        );
+    }
+}
+
+/// A display too short for the swing has no drop that fits. The answer is the top of the display, not
+/// a panic and not a refusal to place the window: a clock the user can see and reset beats one that
+/// declined to exist.
+#[test]
+fn a_short_display_floors_the_drop_at_the_inset_instead_of_failing() {
+    let (c, card) = cfg();
+    let short = m(0, 0.0, 0.0, 800.0, 300.0, 1.0);
+    let p = place(&short, &c, &card, 150.0, 1.0, 0.5, 500.0, 16.0, true);
+    // The frame cannot fit and says so; the hang point is nonetheless on the display, which is what
+    // leaves the clock reachable enough to be reset.
+    let anchor_y = p.frame.y0 + p.anchor.y;
+    assert!(
+        anchor_y > 0.0 && anchor_y < 300.0,
+        "hang point at {anchor_y} is off a 300 px display: {:?}",
+        p.frame
+    );
+    assert!(
+        p.anchor.y > 0.0 && p.anchor.y < p.frame.h(),
+        "the hang point left the frame: {:?} in {:?}",
+        p.anchor,
+        p.frame
+    );
+    assert!(p.frame.y0 >= 0.0 && p.frame.y1 <= 300.0 + 0.001, "{:?}", p.frame);
 }

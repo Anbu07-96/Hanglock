@@ -41,7 +41,6 @@ pub struct Theme {
     pub time_cap: f64,
     pub suffix_cap: f64,
     pub suffix_gap: f64,
-    pub padding_x: f64,
 }
 
 impl Default for Theme {
@@ -66,7 +65,6 @@ impl Default for Theme {
             time_cap: 0.50,
             suffix_cap: 0.167,
             suffix_gap: 10.0,
-            padding_x: 26.0,
         }
     }
 }

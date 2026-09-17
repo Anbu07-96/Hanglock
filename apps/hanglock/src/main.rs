@@ -2,7 +2,9 @@
 //!
 //! The binary is deliberately thin. Everything with a decision in it lives in [`model`], which is
 //! platform-free and therefore testable without a desktop; [`store`] owns the file; and on Windows,
-//! [`app`] adapts the model to the backend. The `unsafe` never reaches this crate at all.
+//! [`app`] adapts the model to the backend. The one place this crate touches the OS directly is
+//! `store`'s use of `ReplaceFileW`, because an atomic replace of a file another process may have open
+//! is a thing only the OS can do; every other line here is safe Rust.
 //!
 //! ## Command line
 //!
@@ -10,12 +12,13 @@
 //! hanglock                     run the overlay
 //! hanglock --dump-scene PATH   paint one settled frame to PATH.png and exit   (any OS)
 //! hanglock --bench N           paint N frames, print ns/frame and present bytes (any OS)
-//! hanglock --diag              print settings, placement, budgets, then exit  (any OS)
+//! hanglock --diag              print settings, displays, placement, budgets   (any OS)
 //! hanglock --background        no-op marker used by the autostart entry
 //! ```
 //!
 //! The non-GUI modes exist so the two claims this project makes about itself — what it looks like
-//! and what it costs — can be checked on a machine with no display, including CI.
+//! and what it costs — can be checked on a machine with no display, including CI. They take no
+//! arguments beyond a path or a count, print everything they used, and never touch the settings file.
 
 mod app;
 // On non-Windows builds the interaction surface (`on_input`, commands, cursors) has no driver —
@@ -25,20 +28,16 @@ mod app;
 mod model;
 mod store;
 
-use hanglock_core::settings::Settings;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let settings = match store::load() {
-        Ok(s) => s,
-        Err(what) => {
-            eprintln!(
-                "hanglock: settings unreadable ({what}); using defaults, original kept alongside"
-            );
-            Settings::default()
-        }
-    };
+    let (settings, found) = store::load();
+    if matches!(found, store::Outcome::Recovered { .. }) {
+        // Once, on stderr, in the same words `--diag` prints: a user who has just lost a settings
+        // document needs to be able to go and look for it, not to be told it is gone.
+        eprintln!("hanglock: {found}");
+    }
 
     if let Some(path) = flag_value(&args, "--dump-scene") {
         return match model::dump_scene(&settings, &path) {
@@ -61,7 +60,11 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     if args.iter().any(|a| a == "--diag") {
-        println!("{}", model::diag(&settings));
+        #[cfg(windows)]
+        let monitors = hanglock_win::displays::monitors();
+        #[cfg(not(windows))]
+        let monitors = Vec::new();
+        println!("{}", model::diag(&settings, &monitors, &found));
         return ExitCode::SUCCESS;
     }
     if args.iter().any(|a| a == "--help" || a == "-h") {
