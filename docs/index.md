@@ -4,7 +4,9 @@
 from the top edge of the desktop on a real rope — draggable, swingable, click-through everywhere it
 isn't drawn, and near-zero cost while you ignore it.
 
-**Status.** Phase 1 delivered the first prototype: the workspace, the solver, the painter, the Win32
+**Status.** Phase 2.5 is open: the code is finished and green, and it is waiting to be *used* — the
+manual checklist for a real Windows desktop is [`testing/windows-desktop-validation.md`](testing/windows-desktop-validation.md)
+(108 checks, with the artifact instructions and a bug template in it). Phase 1 delivered the first prototype: the workspace, the solver, the painter, the Win32
 overlay, the tray, the settings store. Phase 2 made it usable: the hang point is now a pair of numbers
 the file can hold and Alt+drag can move, the mouse has three named modes with a refusal built into one of
 them, the tray grew into the control surface, and a small native settings window draws the rows the

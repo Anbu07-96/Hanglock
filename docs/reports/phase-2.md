@@ -305,6 +305,17 @@ trade.
 `dbf9cba` is the last commit that changes code. The commit that publishes this report is the branch tip after
 it — documentation only, verified by its own run, which is the state the phase ends on.
 
+**One addendum, because the phase's numbers moved after it closed.** Phase 2.5's first commit (`018bb26`,
+*not part of the phase above*) adds `#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem =
+"windows")]` and routes the three stderr messages reachable during a windowed run through a `warn` that
+ignores a failed write, because a double-clicked release build would otherwise have shipped with a
+permanent console window next to the clock — the second check of the new manual checklist,
+`docs/testing/windows-desktop-validation.md`, which it would have failed by construction. Sizes at that
+commit: **364 544 B (356 KB)** x64 and **315 904 B (309 KB)** arm64, +1 536 and +512 on the table above,
+with 104 / 111 / 111 unit tests green and the release `--diag` notice still full — the last being the check
+that the subsystem flip costs the diagnostics nothing, since CI reads them through a pipe exactly as a user
+at a PowerShell prompt will.
+
 ## 15. Screenshots and rendered previews
 
 No new renders. `docs/previews/` still shows the shipped picture, and that is a claim rather than a
