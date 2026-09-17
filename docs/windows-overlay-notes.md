@@ -180,6 +180,21 @@ and long-path handling is not enabled (irrelevant at these path lengths). Adding
 via `link.exe /MANIFESTINPUT:…` in `scripts/build.ps1` is the tidy version; recorded in
 `docs/reports/phase-1.md` as a follow-up rather than done blind here.
 
+The same "no resource tool in the build path" reasoning covers the **subsystem**: without a manifest or
+an `.rc`, a plain `fn main` binary links as a *console* application, so a double-clicked release build
+would put a black console window beside the clock and keep it for the life of the app. `apps/hanglock/src/main.rs`
+therefore carries `#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]`, and
+debug builds keep the console because that is where `--diag` and `--bench` are read on a machine with no
+desktop — CI's Windows jobs included, which is also the check that the attribute is honest: it runs the
+*release* binary piped to `Tee-Object`, and a GUI-subsystem process writes to an inherited pipe fine, so
+if the `--diag` notice ever comes back empty the attribute has cost more than it bought.
+
+One consequence is easy to miss and is the reason for `main.rs`'s `warn`: a GUI-subsystem process launched
+by double-click has **no stderr handle at all**, and Rust's `eprintln!` panics when a write fails. The
+three messages reachable during a windowed run (a quarantined settings file, a settings file that would not
+write, and a registry step that could not find its own executable) go through `warn`, which ignores the
+failed write — losing the note is survivable, taking the clock down with it is not.
+
 All model geometry is in **logical** px; the display scale is applied at `Rope.scale` and at
 `Surface`/`Canvas` sizes, and converted once in `placement::place`. `WM_DPICHANGED` re-runs
 `placement` with the *saved* ratio rather than the suggested rectangle, because the suggested rect is

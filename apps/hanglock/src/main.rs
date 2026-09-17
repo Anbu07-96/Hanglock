@@ -20,6 +20,15 @@
 //! and what it costs — can be checked on a machine with no display, including CI. They take no
 //! arguments beyond a path or a count, print everything they used, and never touch the settings file.
 
+// A clock that hangs from the desktop must not arrive with a black console window next to it, and a
+// plain `fn main` binary is exactly what gets one on Windows. Release builds are therefore
+// GUI-subsystem; debug builds keep the console, because that is where `--diag` and `--bench` are read
+// when the machine running them has no desktop to open a window on. CI's Windows jobs are that case in
+// both directions: they run the *release* binary and capture its stdout through a pipe, which a
+// GUI-subsystem process can still write to — and if that ever stops being true, the run's `--diag`
+// notice goes empty, which is a loud enough failure that this line cannot rot quietly.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod app;
 // On non-Windows builds the interaction surface (`on_input`, commands, cursors) has no driver —
 // the adapter that calls it is the Windows-only half — but the model must stay whole so the same
@@ -36,7 +45,7 @@ fn main() -> ExitCode {
     if matches!(found, store::Outcome::Recovered { .. }) {
         // Once, on stderr, in the same words `--diag` prints: a user who has just lost a settings
         // document needs to be able to go and look for it, not to be told it is gone.
-        eprintln!("hanglock: {found}");
+        warn(&found.to_string());
     }
 
     if let Some(path) = flag_value(&args, "--dump-scene") {
@@ -86,6 +95,17 @@ fn main() -> ExitCode {
         );
         ExitCode::FAILURE
     }
+}
+
+/// Say something on stderr, if there is somewhere to say it. A release build of this binary is a
+/// GUI-subsystem process, so double-clicking it gives it no console and a write to stderr fails — and
+/// `eprintln!` *panics* on a failed write. Losing a startup note must not cost the clock, so the three
+/// messages reachable during a GUI run go through here. Every path that prints on purpose
+/// (`--diag`, `--bench`, `--dump-scene`, `--help`) keeps its `println!`: there, the output is the product
+/// and the caller is a terminal or a pipe.
+fn warn(msg: &str) {
+    use std::io::Write;
+    let _ = writeln!(std::io::stderr(), "hanglock: {msg}");
 }
 
 fn flag_value(args: &[String], name: &str) -> Option<String> {

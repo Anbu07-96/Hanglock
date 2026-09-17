@@ -106,8 +106,10 @@ impl Adapter {
         if dirty {
             if let Err(e) = store::save(&self.model.settings) {
                 // A settings file that will not write is worth printing but never worth exiting
-                // over: the clock on screen is the product, and it is still correct.
-                eprintln!("hanglock: could not save settings: {e}");
+                // over: the clock on screen is the product, and it is still correct. `crate::warn`
+                // rather than `eprintln!` because a double-clicked release build has no console to
+                // print to, and a panic in that write would take the clock with it.
+                crate::warn(&format!("could not save settings: {e}"));
             }
         }
         if relayout {
@@ -155,7 +157,7 @@ impl Adapter {
         // A `let-else` rather than a `match`, because there is exactly one thing to do when the OS
         // cannot say where we are running from: say so, and leave the registry alone.
         let Ok(exe_path) = std::env::current_exe() else {
-            eprintln!("hanglock: cannot find my own executable, so autostart is unchanged");
+            crate::warn("cannot find my own executable, so autostart is unchanged");
             return;
         };
         let exe = exe_path.display().to_string();
