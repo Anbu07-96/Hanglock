@@ -568,6 +568,11 @@ pub unsafe fn open(
 /// Bring an open window to the front. The window is never re-created on a second `Settings…`, because
 /// a second window would be a second picture of the same rows, which is precisely what this file
 /// exists to prevent.
+///
+/// # Safety
+/// `hwnd` must name a window this process created and that still exists. Both calls dereference it, and
+/// the OS has no opinion about a stale handle: it will find *some* window, or none, and the failure is a
+/// wrong pixel in another application rather than an error here.
 pub unsafe fn focus(hwnd: sys::HWND) {
     unsafe {
         sys::ShowWindow(hwnd, sys::SW_RESTORE);
@@ -577,6 +582,12 @@ pub unsafe fn focus(hwnd: sys::HWND) {
 
 /// Replace the rows. Called after every command the model answers, from `Host` and from this window's
 /// own click path, so the picture is never one step behind the document.
+///
+/// # Safety
+/// `hwnd` must be a settings window created by [`open`] in this process. The window's
+/// `GWLP_USERDATA` slot is read and treated as a `*mut Panel`, which is true only of those windows: a
+/// handle to any other window is a type error the OS will not catch, and the store is a 0 in that slot
+/// for a window whose procedure never ran — which is why this reads the slot before it reads the panel.
 pub unsafe fn refresh(hwnd: sys::HWND, groups: Vec<Group>) {
     let ud = unsafe { sys::GetWindowLongPtrW(hwnd, sys::GWLP_USERDATA) };
     if ud == 0 {

@@ -212,7 +212,6 @@ pub fn display_path() -> &'static str {
     }
 }
 
-
 #[cfg(any(windows, test))]
 fn write_and_replace(tmp: &Path, p: &Path, bytes: &[u8]) -> Result<(), String> {
     std::fs::write(tmp, bytes).map_err(|e| format!("write: {e}"))?;

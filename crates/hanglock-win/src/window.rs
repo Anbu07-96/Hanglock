@@ -490,8 +490,8 @@ impl Host {
 
     /// The tray menu, or the card's context menu: the same list, from the same code.
     #[must_use]
-    pub fn popup_menu(&mut self, at_screen: (i32, i32), st: tray::MenuState) -> Option<Command> {
-        self.tray.as_mut().and_then(|t| t.show_menu(at_screen, &st))
+    pub fn popup_menu(&mut self, at_screen: (i32, i32), st: &tray::MenuState) -> Option<Command> {
+        self.tray.as_mut().and_then(|t| t.show_menu(at_screen, st))
     }
 
     pub fn set_tooltip(&mut self, text: &str) {
@@ -772,7 +772,7 @@ unsafe extern "system" fn wndproc<A: AppHook + 'static>(
                 let mut pt = sys::POINT { x: 0, y: 0 };
                 unsafe { sys::GetCursorPos(&mut pt) };
                 let st = app.menu_state(host);
-                if let Some(cmd) = host.popup_menu((pt.x, pt.y), st) {
+                if let Some(cmd) = host.popup_menu((pt.x, pt.y), &st) {
                     app.on_command(host, cmd);
                     host.sync_tick_timer();
                 }
@@ -885,7 +885,7 @@ unsafe fn on_pointer<A: AppHook + 'static>(
             let mut pt = sys::POINT { x: 0, y: 0 };
             unsafe { sys::GetCursorPos(&mut pt) };
             let st = app.menu_state(host);
-            if let Some(cmd) = host.popup_menu((pt.x, pt.y), st) {
+            if let Some(cmd) = host.popup_menu((pt.x, pt.y), &st) {
                 app.on_command(host, cmd);
                 host.sync_tick_timer();
             }
