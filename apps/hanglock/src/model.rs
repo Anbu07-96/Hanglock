@@ -102,17 +102,15 @@ impl HitRegions {
         if !self.interactive {
             return false;
         }
-        let (cs, sn) = (self.theta.cos(), self.theta.sin());
-        let (dx, dy) = (p.x - self.plate_centre.x, p.y - self.plate_centre.y);
-        let lx = dx * cs + dy * sn;
-        let ly = -dx * sn + dy * cs;
-        if lx.abs() <= self.plate_hw && ly.abs() <= self.plate_hh {
+        let dx = p.x - self.plate_centre.x;
+        let dy = p.y - self.plate_centre.y;
+        let radius = self.plate_hw.min(self.plate_hh);
+        if dx * dx + dy * dy <= radius * radius {
             return true;
         }
-        // The ring is a small square rather than a circle: at 16 px it is indistinguishable, and a
-        // square is cheaper to reason about when someone asks why the corner of it is grabbable.
-        (p.x - self.anchor.x).abs() <= self.anchor_radius
-            && (p.y - self.anchor.y).abs() <= self.anchor_radius
+        let ax = p.x - self.anchor.x;
+        let ay = p.y - self.anchor.y;
+        ax * ax + ay * ay <= self.anchor_radius * self.anchor_radius
     }
 
     #[cfg(test)]
@@ -121,17 +119,18 @@ impl HitRegions {
         if !self.interactive {
             return false;
         }
-        let (dx, dy) = ((p.x - self.anchor.x).abs(), (p.y - self.anchor.y).abs());
-        (dx <= self.anchor_radius && dy <= self.anchor_radius) && !self.on_plate(p)
+        let dx = p.x - self.anchor.x;
+        let dy = p.y - self.anchor.y;
+        (dx * dx + dy * dy <= self.anchor_radius * self.anchor_radius) && !self.on_plate(p)
     }
 
     #[cfg(test)]
     #[must_use]
     pub fn on_plate(&self, p: Vec2) -> bool {
-        let (cs, sn) = (self.theta.cos(), self.theta.sin());
-        let (dx, dy) = (p.x - self.plate_centre.x, p.y - self.plate_centre.y);
-        ((dx * cs + dy * sn).abs() <= self.plate_hw)
-            && ((-dx * sn + dy * cs).abs() <= self.plate_hh)
+        let dx = p.x - self.plate_centre.x;
+        let dy = p.y - self.plate_centre.y;
+        let radius = self.plate_hw.min(self.plate_hh);
+        dx * dx + dy * dy <= radius * radius
     }
 }
 
@@ -482,7 +481,9 @@ impl Model {
     pub fn ring_contains(&self, at: Vec2) -> bool {
         let r = (10.0 * self.layout_scale).max(8.0);
         let a = self.rope.anchor;
-        (at.x - a.x).abs() <= r && (at.y - a.y).abs() <= r
+        let dx = at.x - a.x;
+        let dy = at.y - a.y;
+        dx * dx + dy * dy <= r * r
     }
 
     /// Write a hang point into the document and move the overlay to it.

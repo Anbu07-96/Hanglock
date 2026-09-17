@@ -350,7 +350,7 @@ impl AppHook for Adapter {
             theta: r.theta,
             interactive: r.interactive,
             whole_window: r.whole_window,
-            pad: 0.0,
+            pad: 4.0 * r.plate_hw.min(r.plate_hh) / r.plate_hw.max(r.plate_hh),
             anchor: r.anchor,
             anchor_radius: r.anchor_radius,
         }

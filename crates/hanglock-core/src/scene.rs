@@ -95,10 +95,9 @@ impl Scene {
 
     #[must_use]
     pub fn point_in_plate(&self, p: Vec2) -> bool {
-        let hw = self.card_w * 0.5 + self.bracket * 0.35;
-        let hh = self.card_h * 0.5 + self.bracket * 0.35;
-        let (cs, sn) = (self.theta.cos(), self.theta.sin());
-        let (dx, dy) = (p.x - self.card_centre.x, p.y - self.card_centre.y);
-        (dx * cs + dy * sn).abs() <= hw && (-dx * sn + dy * cs).abs() <= hh
+        let radius = self.card_w.min(self.card_h) * 0.5;
+        let dx = p.x - self.card_centre.x;
+        let dy = p.y - self.card_centre.y;
+        dx * dx + dy * dy <= radius * radius
     }
 }

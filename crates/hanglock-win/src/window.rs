@@ -81,15 +81,15 @@ impl HitShape {
         if !self.interactive {
             return false;
         }
-        let (cs, sn) = (self.theta.cos(), self.theta.sin());
-        let (dx, dy) = (p.x - self.centre.x, p.y - self.centre.y);
-        let lx = dx * cs + dy * sn;
-        let ly = -dx * sn + dy * cs;
-        if lx.abs() <= self.hw + self.pad && ly.abs() <= self.hh + self.pad {
+        let dx = p.x - self.centre.x;
+        let dy = p.y - self.centre.y;
+        let radius = self.hw.min(self.hh) + self.pad;
+        if dx * dx + dy * dy <= radius * radius {
             return true;
         }
-        (p.x - self.anchor.x).abs() <= self.anchor_radius
-            && (p.y - self.anchor.y).abs() <= self.anchor_radius
+        let ax = p.x - self.anchor.x;
+        let ay = p.y - self.anchor.y;
+        ax * ax + ay * ay <= self.anchor_radius * self.anchor_radius
     }
 
     /// Whether the point is on the ring and not on the plate — the re-anchor gesture.
@@ -98,13 +98,13 @@ impl HitShape {
         if !self.interactive {
             return false;
         }
-        let (cs, sn) = (self.theta.cos(), self.theta.sin());
-        let (dx, dy) = (p.x - self.centre.x, p.y - self.centre.y);
-        let on_plate = (dx * cs + dy * sn).abs() <= self.hw + self.pad
-            && (-dx * sn + dy * cs).abs() <= self.hh + self.pad;
-        !on_plate
-            && (p.x - self.anchor.x).abs() <= self.anchor_radius
-            && (p.y - self.anchor.y).abs() <= self.anchor_radius
+        let dx = p.x - self.centre.x;
+        let dy = p.y - self.centre.y;
+        let radius = self.hw.min(self.hh) + self.pad;
+        let on_plate = dx * dx + dy * dy <= radius * radius;
+        let ax = p.x - self.anchor.x;
+        let ay = p.y - self.anchor.y;
+        !on_plate && ax * ax + ay * ay <= self.anchor_radius * self.anchor_radius
     }
 }
 
