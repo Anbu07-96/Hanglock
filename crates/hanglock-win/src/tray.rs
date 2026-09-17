@@ -10,7 +10,7 @@
 
 use crate::icon;
 use crate::sys;
-use hanglock_core::ids::{ClickThrough, PostureKind};
+use hanglock_core::ids::{ClickThrough, ClockStyle, PostureKind};
 use hanglock_platform::Command;
 
 /// `TPM_RETURNCMD` gives the selected id straight back, so no message plumbing is needed and the ids
@@ -36,6 +36,7 @@ pub struct MenuState {
     pub seconds: bool,
     pub hour12: bool,
     pub meridiem: bool,
+    pub style: ClockStyle,
     pub posture: PostureKind,
     pub click_through: ClickThrough,
     pub launch_at_login: bool,
@@ -289,6 +290,19 @@ impl Plan {
             st.meridiem,
             st.hour12,
         );
+        let style = format!("Style: {}", st.style.label());
+        let sub = submenu(menu, &style);
+        if !sub.is_null() {
+            for clock_style in ClockStyle::ALL {
+                self.item(
+                    sub,
+                    clock_style.label(),
+                    Command::SetStyle(clock_style),
+                    st.style == clock_style,
+                    true,
+                );
+            }
+        }
         let swing = format!("How it swings: {}", st.posture.label());
         let sub = submenu(menu, &swing);
         if !sub.is_null() {

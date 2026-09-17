@@ -22,7 +22,13 @@ fn scene_at(theta: f64, centre: Vec2, text: FaceText) -> Scene {
     for _ in 0..200 {
         rope.step(1.0 / 60.0);
     }
-    let mut s = Scene::new(&rope, &rope.cfg, text, 1.0);
+    let mut s = Scene::new(
+        &rope,
+        &rope.cfg,
+        text,
+        hanglock_core::ids::ClockStyle::default(),
+        1.0,
+    );
     // Overwrite the pose rather than driving the solver: these tests are about drawing.
     s.card_centre = centre;
     s.theta = theta;
@@ -129,6 +135,33 @@ fn painting_is_deterministic() {
     assert_eq!(
         a.px, b.px,
         "two paints of one scene must agree, or the golden images mean nothing"
+    );
+}
+
+#[test]
+fn every_clock_style_paints_a_distinct_nonempty_face() {
+    let base = scene_at(0.0, Vec2::new(320.0, 220.0), face("10:42"));
+    let mut checksums = Vec::new();
+    for style in hanglock_core::ids::ClockStyle::ALL {
+        let mut sc = base;
+        sc.style = style;
+        let theme = Theme::for_style(style);
+        let mut cv = Canvas::new(640, 360);
+        paint(&sc, &mut cv, &theme);
+        assert!(
+            cv.px.iter().any(|byte| *byte != 0),
+            "{style:?} painted nothing"
+        );
+        checksums.push(cv.px.iter().fold(0u64, |sum, byte| {
+            sum.wrapping_mul(16_777_619).wrapping_add(u64::from(*byte))
+        }));
+    }
+    checksums.sort_unstable();
+    checksums.dedup();
+    assert_eq!(
+        checksums.len(),
+        3,
+        "the selectable styles must not collapse to one image"
     );
 }
 

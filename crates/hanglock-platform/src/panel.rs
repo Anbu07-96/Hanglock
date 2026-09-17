@@ -14,7 +14,7 @@
 //! prevent.
 
 use hanglock_core::anchor::Anchor;
-use hanglock_core::ids::{ClickThrough, PostureKind};
+use hanglock_core::ids::{ClickThrough, ClockStyle, PostureKind};
 use hanglock_core::placement::Monitor;
 use hanglock_core::settings::{limits, Settings};
 
@@ -30,6 +30,7 @@ pub enum RowId {
     Hour12,
     Seconds,
     Meridiem,
+    Style,
     ClockSize,
     HangLength,
     ClickThrough,
@@ -119,6 +120,14 @@ fn general_group(s: &Settings, monitors: &[Monitor]) -> Group {
     Group {
         title: "General",
         rows: vec![
+            Row {
+                id: RowId::Style,
+                label: "Style",
+                control: Control::Choice {
+                    options: style_options(),
+                    selected: index_of_style(f.style),
+                },
+            },
             Row {
                 id: RowId::LaunchAtLogin,
                 label: "Start with Windows",
@@ -300,6 +309,17 @@ fn posture_options() -> Vec<String> {
     v
 }
 
+fn style_options() -> Vec<String> {
+    ClockStyle::ALL
+        .iter()
+        .map(|style| style.label().to_string())
+        .collect()
+}
+
+fn index_of_style(cur: ClockStyle) -> usize {
+    position(ClockStyle::ALL.iter().position(|style| *style == cur))
+}
+
 fn index_of_click(cur: ClickThrough) -> usize {
     position(ClickThrough::ALL.iter().position(|c| *c == cur))
 }
@@ -351,6 +371,7 @@ pub fn change(s: &Settings, id: RowId, step: Step) -> Option<Command> {
         (RowId::Hour12, Step::Toggle) => Some(Command::Toggle12Hour),
         (RowId::Seconds, Step::Toggle) => Some(Command::ToggleSeconds),
         (RowId::Meridiem, Step::Toggle) => Some(Command::ToggleMeridiem),
+        (RowId::Style, Step::Pick(n)) => ClockStyle::ALL.get(n).copied().map(Command::SetStyle),
         (RowId::Posture, Step::Pick(n)) => {
             PostureKind::ALL.get(n).copied().map(Command::SetPosture)
         }

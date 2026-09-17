@@ -20,7 +20,7 @@
 pub mod panel;
 
 use hanglock_core::anchor::Anchor;
-use hanglock_core::ids::{ClickThrough, PostureKind};
+use hanglock_core::ids::{ClickThrough, ClockStyle, PostureKind};
 use hanglock_core::placement::{Monitor, Rect};
 use hanglock_core::vec2::Vec2;
 
@@ -40,6 +40,7 @@ pub enum Command {
     ToggleSeconds,
     Toggle12Hour,
     ToggleMeridiem,
+    SetStyle(ClockStyle),
     SetPosture(PostureKind),
     SetClickThrough(ClickThrough),
     /// Which display to hang from, by the index the settings file stores — not the position in a

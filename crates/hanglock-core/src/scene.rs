@@ -9,6 +9,7 @@
 //! applied, so the painter has one coordinate space and no scale factor to remember.
 
 use crate::clock::format::FaceText;
+use crate::ids::ClockStyle;
 use crate::rope::{CardSpec, Rope, RopeConfig};
 use crate::vec2::Vec2;
 
@@ -38,6 +39,7 @@ pub struct Scene {
     pub scale: f64,
     pub opacity: f64,
     pub text: FaceText,
+    pub style: ClockStyle,
     pub dragging: bool,
     /// The solver has stopped. The painter uses this for nothing visible; the *frame clock* uses it
     /// to stop asking for frames. It travels in the scene so a debug read-out can show the truth.
@@ -46,7 +48,13 @@ pub struct Scene {
 
 impl Scene {
     #[must_use]
-    pub fn new(rope: &Rope, cfg_unused: &RopeConfig, text: FaceText, opacity: f64) -> Self {
+    pub fn new(
+        rope: &Rope,
+        cfg_unused: &RopeConfig,
+        text: FaceText,
+        style: ClockStyle,
+        opacity: f64,
+    ) -> Self {
         let _ = cfg_unused;
         let s = rope.scale;
         let card = CardSpec {
@@ -75,6 +83,7 @@ impl Scene {
             scale: s,
             opacity: opacity.clamp(0.0, 1.0),
             text,
+            style,
             dragging: rope.is_dragging(),
             asleep: rope.sleeping,
         }

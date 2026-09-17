@@ -151,6 +151,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { python tools/ci/emit.py "smoke bench ${{ matrix.arch }}" bench.txt; exit 1 }
           & $exe --dump-scene scene.png 2>&1 | Tee-Object -FilePath dump.txt
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path scene.png)) { python tools/ci/emit.py "smoke dump ${{ matrix.arch }}" dump.txt; exit 1 }
+          & $exe --dump-styles style-previews 2>&1 | Tee-Object -FilePath dump-styles.txt
+          if ($LASTEXITCODE -ne 0 -or (Get-ChildItem style-previews/*.png).Count -ne 3) { python tools/ci/emit.py "style previews ${{ matrix.arch }}" dump-styles.txt; exit 1 }
           $d = ((Get-Content diag.txt | Where-Object { $_ -ne "" }) -join " / ") -replace "::", ":"
           Write-Host "::notice title=smoke diag ${{ matrix.arch }}::$d"
           $b = (((Get-Content bench.txt | Where-Object { $_ -ne "" }) | Select-Object -Last 5) -join " / ") -replace "::", ":"
@@ -173,3 +175,4 @@ jobs:
             diag.txt
             bench.txt
             scene.png
+            style-previews/*.png

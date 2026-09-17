@@ -5,7 +5,7 @@
 //! way a window does and answer each click the way the tray would, so the two of them have to agree
 //! with the document.
 
-use hanglock_core::ids::{ClickThrough, PostureKind};
+use hanglock_core::ids::{ClickThrough, ClockStyle, PostureKind};
 use hanglock_core::placement::{Monitor, Rect};
 use hanglock_core::settings::Settings;
 use hanglock_platform::panel::{self, Control, RowId, Step};
@@ -60,6 +60,7 @@ fn the_window_offers_exactly_the_essential_choices() {
         RowId::LaunchAtLogin,
         RowId::Topmost,
         RowId::Monitor,
+        RowId::Style,
         RowId::Hour12,
         RowId::Seconds,
         RowId::Meridiem,
@@ -114,6 +115,7 @@ fn every_row_reads_the_document_it_was_handed() {
     s.face.hour12 = false;
     s.face.seconds = true;
     s.face.meridiem = false;
+    s.face.style = ClockStyle::SoftMattePlayful;
     s.overlay.click_through = ClickThrough::Solid;
     s.face.posture = PostureKind::Locked;
     s.overlay.anchor_ratio = 0.25;
@@ -140,6 +142,10 @@ fn every_row_reads_the_document_it_was_handed() {
         panic!("the posture row is a choice");
     };
     assert_eq!(options[selected], PostureKind::Locked.label());
+    let Control::Choice { options, selected } = control(&s, RowId::Style) else {
+        panic!("the style row is a choice");
+    };
+    assert_eq!(options[selected], ClockStyle::SoftMattePlayful.label());
     let Control::Nudge {
         text,
         can_down,
@@ -255,6 +261,10 @@ fn a_click_on_each_row_asks_for_the_tray_s_own_command() {
     assert_eq!(ask(RowId::Hour12, Step::Toggle), Command::Toggle12Hour);
     assert_eq!(ask(RowId::Seconds, Step::Toggle), Command::ToggleSeconds);
     assert_eq!(ask(RowId::Meridiem, Step::Toggle), Command::ToggleMeridiem);
+    assert_eq!(
+        ask(RowId::Style, Step::Pick(1)),
+        Command::SetStyle(ClockStyle::PremiumMetalGlass)
+    );
     assert_eq!(ask(RowId::ClockSize, Step::Up), Command::Bigger);
     assert_eq!(ask(RowId::ClockSize, Step::Down), Command::Smaller);
     assert_eq!(ask(RowId::HangLength, Step::Up), Command::HangUp);
@@ -295,6 +305,7 @@ fn a_click_on_each_row_asks_for_the_tray_s_own_command() {
 fn a_click_that_cannot_change_anything_asks_for_nothing() {
     let s = docs();
     assert_eq!(panel::change(&s, RowId::Posture, Step::Pick(99)), None);
+    assert_eq!(panel::change(&s, RowId::Style, Step::Pick(99)), None);
     assert_eq!(
         panel::change(&s, RowId::ClickThrough, Step::Pick(7)),
         None,

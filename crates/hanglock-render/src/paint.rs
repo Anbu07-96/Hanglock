@@ -10,6 +10,7 @@ use crate::canvas::{centre, dist_seg, sdf_round_box, smooth, Canvas};
 use crate::face_data::{self, ADVANCE, STROKE_RATIO, TRACKING};
 use crate::theme::{Rgba, Theme};
 use hanglock_core::placement::Rect;
+use hanglock_core::ids::ClockStyle;
 use hanglock_core::scene::Scene;
 use hanglock_core::vec2::Vec2;
 
@@ -55,6 +56,50 @@ fn capsule(cv: &mut Canvas, a: Vec2, b: Vec2, rad: f64, col: Rgba, aa: f64) {
                 (pr * cov) as u16,
                 (cov * 255.0) as u16,
             );
+        }
+        cv.touch_row(y as i32, x0.max(0) as i32, x1.min(w - 1) as i32);
+    }
+}
+
+/// A filled stroke with flat terminals. The old face reused the cord's capsules, which made every
+/// numeral look handwritten. Clock type is an outline, not a rope: this primitive keeps the same
+/// allocation-free coverage loop while giving the generated geometry crisp, designed ends.
+fn flat_stroke(cv: &mut Canvas, a: Vec2, b: Vec2, rad: f64, col: Rgba, aa: f64) {
+    let d = b.sub(a);
+    let len = d.len();
+    if len <= 1e-6 {
+        capsule(cv, a, b, rad, col, aa);
+        return;
+    }
+    let u = d.scale(1.0 / len);
+    let pad = rad + 1.0;
+    let x0 = (a.x.min(b.x) - pad).floor() as i64;
+    let x1 = (a.x.max(b.x) + pad).ceil() as i64;
+    let y0 = (a.y.min(b.y) - pad).floor() as i64;
+    let y1 = (a.y.max(b.y) + pad).ceil() as i64;
+    let (w, h) = (i64::from(cv.w), i64::from(cv.h));
+    for y in y0.max(0)..=y1.min(h - 1) {
+        for x in x0.max(0)..=x1.min(w - 1) {
+            let p = centre(x as i32, y as i32).sub(a);
+            let along = p.x * u.x + p.y * u.y;
+            let across = (p.x * u.y - p.y * u.x).abs();
+            let outside = (-along).max(along - len).max(0.0);
+            let dist = if outside > 0.0 {
+                (outside * outside + across * across).sqrt()
+            } else {
+                across
+            };
+            let cov = smooth(aa * 0.5, -aa * 0.5, dist - rad) * col.a;
+            if cov > 0.002 {
+                cv.blend(
+                    x as i32,
+                    y as i32,
+                    (col.b * 255.0 * cov) as u16,
+                    (col.g * 255.0 * cov) as u16,
+                    (col.r * 255.0 * cov) as u16,
+                    (cov * 255.0) as u16,
+                );
+            }
         }
         cv.touch_row(y as i32, x0.max(0) as i32, x1.min(w - 1) as i32);
     }
@@ -308,7 +353,7 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
                     scene.theta,
                     Vec2::new(gx + f64::from(w[1].x) * cap, oy + f64::from(w[1].y) * cap),
                 );
-                capsule(cv, a, b, rad, theme.ink, 1.05);
+                flat_stroke(cv, a, b, rad, theme.ink, 1.05);
             }
         }
         for d in g.dots {
@@ -349,7 +394,7 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
                             soy + f64::from(w[1].y) * scap,
                         ),
                     );
-                    capsule(
+                    flat_stroke(
                         cv,
                         a,
                         b,
@@ -368,10 +413,15 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
 /// The clamp against the top of the screen, and the ring the cord runs through.
 fn paint_mount(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
     let a = scene.anchor;
+    let (rail, rail_h) = match theme.style {
+        ClockStyle::ModernMinimal => (13.0, 2.6),
+        ClockStyle::PremiumMetalGlass => (15.0, 3.1),
+        ClockStyle::SoftMattePlayful => (12.0, 3.6),
+    };
     box_shadow(
         cv,
         a,
-        Vec2::new(21.0 * scene.scale, 4.2 * scene.scale),
+        Vec2::new(rail * scene.scale, rail_h * scene.scale),
         3.0 * scene.scale,
         1.0,
         2.2,
@@ -380,7 +430,7 @@ fn paint_mount(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
     box_fill(
         cv,
         Vec2::new(a.x, a.y + 0.7 * scene.scale),
-        Vec2::new(21.0 * scene.scale, 5.4 * scene.scale),
+        Vec2::new(rail * scene.scale, rail_h * scene.scale),
         3.0 * scene.scale,
         theme.mount,
         theme.mount,
@@ -388,9 +438,9 @@ fn paint_mount(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
     );
     annulus(
         cv,
-        Vec2::new(a.x, a.y + 8.6 * scene.scale),
-        3.5 * scene.scale,
-        1.25 * scene.scale,
+        Vec2::new(a.x, a.y + 6.2 * scene.scale),
+        theme.eyelet_radius * 0.72 * scene.scale,
+        theme.eyelet_width * scene.scale,
         theme.mount,
     );
 }
@@ -427,9 +477,39 @@ fn paint_plate(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
             }
             let t = ((p.y - (c.y - radius)) / (2.0 * radius)).clamp(0.0, 1.0);
             let lerp = |u: f64, v: f64| u + (v - u) * t;
-            let edge = d.abs();
-            let (r, g, bch, al) = if edge < 1.3 {
-                (theme.rim.r, theme.rim.g, theme.rim.b, theme.rim.a)
+            let edge_from_outer = radius - p.dist(c);
+            let face_radius = radius - theme.inset * scene.scale;
+            let face_d = p.dist(c) - face_radius;
+            let nx = (p.x - c.x) / radius.max(1.0);
+            let ny = (p.y - c.y) / radius.max(1.0);
+            let directional = ((-nx - ny) * 0.5 + 0.5).clamp(0.0, 1.0);
+            let (r, g, bch, al) = if edge_from_outer < theme.rim_width * scene.scale {
+                let hi = directional;
+                (
+                    lerp(theme.rim_bottom.r, theme.rim_top.r) * hi + theme.rim.r * (1.0 - hi),
+                    lerp(theme.rim_bottom.g, theme.rim_top.g) * hi + theme.rim.g * (1.0 - hi),
+                    lerp(theme.rim_bottom.b, theme.rim_top.b) * hi + theme.rim.b * (1.0 - hi),
+                    theme.rim.a,
+                )
+            } else if face_d <= 0.0 {
+                let glass = if theme.style == ClockStyle::PremiumMetalGlass {
+                    directional * 0.025
+                } else {
+                    0.0
+                };
+                (
+                    theme.face.r + glass,
+                    theme.face.g + glass,
+                    theme.face.b + glass,
+                    theme.face.a,
+                )
+            } else if face_d < 1.4 * scene.scale {
+                (
+                    theme.inner_rim.r,
+                    theme.inner_rim.g,
+                    theme.inner_rim.b,
+                    theme.inner_rim.a,
+                )
             } else {
                 (
                     lerp(theme.plate_top.r, theme.plate_bottom.r),
@@ -450,6 +530,15 @@ fn paint_plate(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
         }
         cv.touch_row(y as i32, x0.max(0) as i32, x1.min(w_ - 1) as i32);
     }
+    let up = Vec2::new(scene.theta.sin(), -scene.theta.cos());
+    let eyelet = c.add(up.scale(radius - theme.eyelet_radius * 1.8 * scene.scale));
+    annulus(
+        cv,
+        eyelet,
+        theme.eyelet_radius * scene.scale,
+        theme.eyelet_width * scene.scale,
+        theme.accent,
+    );
 }
 
 pub fn paint(scene: &Scene, cv: &mut Canvas, theme: &Theme) {
@@ -466,13 +555,13 @@ pub fn paint(scene: &Scene, cv: &mut Canvas, theme: &Theme) {
     while last > 1 && scene.point_in_plate(pts[last]) {
         last -= 1;
     }
-    let w = (1.7 * scene.scale).max(scene.card_h * 0.026);
+    let w = theme.rope_width * scene.scale;
     for i in 0..last {
         capsule(
             cv,
             pts[i].add(Vec2::new(1.3, 1.3)),
             pts[i + 1].add(Vec2::new(1.3, 1.3)),
-            w * 1.6,
+            w * 1.28,
             theme.cord_shadow,
             1.05,
         );
@@ -481,12 +570,12 @@ pub fn paint(scene: &Scene, cv: &mut Canvas, theme: &Theme) {
         capsule(cv, pts[i], pts[i + 1], w, theme.cord, 1.05);
     }
     for i in 0..last {
-        let o = Vec2::new(-w * 0.30, -w * 0.30);
+        let o = Vec2::new(-w * 0.24, -w * 0.24);
         capsule(
             cv,
             pts[i].add(o),
             pts[i + 1].add(o),
-            w * 0.34,
+            w * theme.rope_edge,
             theme.cord_lit,
             1.05,
         );

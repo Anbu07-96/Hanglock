@@ -91,6 +91,52 @@ pub enum PostureKind {
     Locked,
 }
 
+/// The clock's complete visual language. Physics and window behaviour never branch on this value;
+/// it is carried to the renderer and to the two settings surfaces only.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ClockStyle {
+    #[default]
+    ModernMinimal,
+    PremiumMetalGlass,
+    SoftMattePlayful,
+}
+
+impl ClockStyle {
+    pub const ALL: [Self; 3] = [
+        Self::ModernMinimal,
+        Self::PremiumMetalGlass,
+        Self::SoftMattePlayful,
+    ];
+
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ModernMinimal => "modern_minimal",
+            Self::PremiumMetalGlass => "premium_metal_glass",
+            Self::SoftMattePlayful => "soft_matte_playful",
+        }
+    }
+
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "modern_minimal" => Some(Self::ModernMinimal),
+            "premium_metal_glass" => Some(Self::PremiumMetalGlass),
+            "soft_matte_playful" => Some(Self::SoftMattePlayful),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::ModernMinimal => "Modern Minimal",
+            Self::PremiumMetalGlass => "Premium Metal / Glass",
+            Self::SoftMattePlayful => "Soft Matte Playful",
+        }
+    }
+}
+
 impl PostureKind {
     #[must_use]
     pub fn as_str(self) -> &'static str {

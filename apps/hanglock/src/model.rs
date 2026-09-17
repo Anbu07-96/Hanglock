@@ -199,7 +199,7 @@ pub struct Counters {
 impl Model {
     #[must_use]
     pub fn new(settings: Settings) -> Self {
-        let theme = Theme::default();
+        let theme = Theme::for_style(settings.face.style);
         let card = settings.card();
         let rope = Rope::new(
             hanglock_core::rope::config::RopeConfig::default(),
@@ -538,6 +538,12 @@ impl Model {
                 self.settings.face.meridiem = !self.settings.face.meridiem;
                 out.push(Action::Save);
             }
+            Command::SetStyle(style) => {
+                self.settings.face.style = style;
+                self.theme = Theme::for_style(style);
+                out.push(Action::Save);
+                out.push(Action::PresentFull);
+            }
             Command::SetPosture(p) => {
                 self.notice = None;
                 self.settings.face.posture = p;
@@ -661,6 +667,7 @@ impl Model {
             &self.rope,
             &self.rope.cfg,
             self.text,
+            self.settings.face.style,
             self.settings.overlay.opacity,
         )
     }
@@ -852,6 +859,22 @@ pub fn dump_scene(settings: &Settings, path: &str) -> Result<usize, String> {
     let png = hanglock_render::png::encode(&m.canvas);
     std::fs::write(path, &png).map_err(|e| format!("{path}: {e}"))?;
     Ok(png.len())
+}
+
+/// Render the same production scene in every selectable style. These are evidence of what the
+/// shipped painter produces, not aspirational concept art.
+pub fn dump_styles(settings: &Settings, dir: &str) -> Result<Vec<String>, String> {
+    std::fs::create_dir_all(dir).map_err(|e| format!("{dir}: {e}"))?;
+    let mut written = Vec::with_capacity(hanglock_core::ids::ClockStyle::ALL.len());
+    for style in hanglock_core::ids::ClockStyle::ALL {
+        let mut styled = *settings;
+        styled.face.style = style;
+        let path = std::path::Path::new(dir).join(format!("{}.png", style.as_str()));
+        let shown = path.to_string_lossy().into_owned();
+        dump_scene(&styled, &shown)?;
+        written.push(shown);
+    }
+    Ok(written)
 }
 
 pub fn bench(settings: &Settings, n: usize) {

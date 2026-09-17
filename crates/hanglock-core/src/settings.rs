@@ -16,7 +16,7 @@
 //! *   **Nothing is dropped without a trace**: a file that cannot be read at all is renamed by the
 //!     caller before defaults are written, never overwritten.
 
-use crate::ids::{ClickThrough, PostureKind};
+use crate::ids::{ClickThrough, ClockStyle, PostureKind};
 
 /// Written into every document so a future breaking change can migrate deliberately.
 pub const SCHEMA: u32 = 1;
@@ -56,6 +56,7 @@ pub struct Overlay {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Face {
+    pub style: ClockStyle,
     pub hour12: bool,
     pub seconds: bool,
     pub meridiem: bool,
@@ -94,6 +95,7 @@ impl Default for Settings {
                 margin: 16.0,
             },
             face: Face {
+                style: ClockStyle::default(),
                 hour12: true,
                 seconds: false,
                 meridiem: true,
@@ -191,6 +193,7 @@ impl Settings {
         ));
         s.push_str(&format!("margin = {}\n", fix(self.overlay.margin)));
         s.push_str("\n[face]\n");
+        s.push_str(&format!("style = \"{}\"\n", self.face.style.as_str()));
         s.push_str(&format!("hour12 = {}\n", yes(self.face.hour12)));
         s.push_str(&format!("seconds = {}\n", yes(self.face.seconds)));
         s.push_str(&format!("meridiem = {}\n", yes(self.face.meridiem)));
@@ -252,6 +255,14 @@ impl Settings {
                 },
                 ("overlay", "respect_taskbar") => out.overlay.respect_taskbar = bool_of(value),
                 ("overlay", "margin") => out.overlay.margin = float_of(value, 16.0),
+                ("face", "style") => match ClockStyle::parse(value) {
+                    Some(v) => out.face.style = v,
+                    None => warnings.push(format!(
+                        "line {}: unknown style {value:?}, keeping {}",
+                        n + 1,
+                        out.face.style.as_str(),
+                    )),
+                },
                 ("face", "hour12") => out.face.hour12 = bool_of(value),
                 ("face", "seconds") => out.face.seconds = bool_of(value),
                 ("face", "meridiem") => out.face.meridiem = bool_of(value),

@@ -1,7 +1,7 @@
 //! The rules that decide whether a user keeps their preferences across an upgrade. All of these
 //! exist because the alternative is a support thread titled "it reset everything".
 
-use hanglock_core::ids::{ClickThrough, PostureKind};
+use hanglock_core::ids::{ClickThrough, ClockStyle, PostureKind};
 use hanglock_core::settings::{Settings, SCHEMA};
 
 #[test]
@@ -81,6 +81,7 @@ fn a_round_trip_loses_nothing() {
     s.face.seconds = true;
     s.face.hour12 = false;
     s.face.posture = PostureKind::Mounted;
+    s.face.style = ClockStyle::PremiumMetalGlass;
     s.general.launch_at_login = true;
     s.general.fps_cap = 120;
     let text = s.to_toml();
@@ -127,6 +128,9 @@ fn posture_and_click_through_names_round_trip() {
             "{} did not survive its own name",
             c.as_str()
         );
+    }
+    for style in ClockStyle::ALL {
+        assert_eq!(ClockStyle::parse(style.as_str()), Some(style));
     }
     assert_eq!(
         PostureKind::parse("Plate"),

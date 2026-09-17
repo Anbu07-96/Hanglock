@@ -176,6 +176,7 @@ impl Adapter {
              A clock that hangs on a cord in front of your desktop.\n\
              \n\
              Time: {}-hour{}, {}\n\
+             Style: {}\n\
              Mouse: {}\n\
              Hang: {} px from the top edge, {}% across\n\
              Always on top: {}\n\
@@ -195,6 +196,7 @@ impl Adapter {
             } else {
                 "no seconds"
             },
+            s.face.style.label(),
             s.overlay.click_through.label(),
             a.drop.round() as i64,
             (a.ratio * 100.0).round() as i64,
@@ -262,6 +264,7 @@ impl Adapter {
             seconds: s.face.seconds,
             hour12: s.face.hour12,
             meridiem: s.face.meridiem,
+            style: s.face.style,
             posture: s.face.posture,
             click_through: s.overlay.click_through,
             launch_at_login: s.general.launch_at_login,
