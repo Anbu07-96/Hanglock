@@ -5,7 +5,7 @@ from hanglock_ref import Canvas, smooth, write_png
 from hanglock_concepts import bar, draw_text
 
 CONCEPTS = {
-    "minimal": dict(radius=78, hang=62, cord=1.8, body=(.075,.09,.12,.97), rim=(.48,.66,.82,.55),
+    "minimal": dict(radius=78, hang=150, cord=1.8, body=(.075,.09,.12,.97), rim=(.48,.66,.82,.55),
                      shadow=(.0,.0,.0,.20), ink=(.86,.92,.98), suffix=(.64,.75,.86), accent=(.20,.48,.72),
                      mount=(.28,.35,.43), bg=(.90,.89,.86)),
     "premium": dict(radius=88, hang=76, cord=1.35, body=(.12,.14,.19,.88), rim=(.58,.70,.86,.72),
