@@ -318,7 +318,7 @@ pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
     };
     rt.host.hwnd = hwnd;
     rt.host.instance = instance;
-    rt.host.runtime = me as *mut Runtime<A> as *mut core::ffi::c_void;
+    rt.host.runtime = me.cast();
     rt.host.open_panel = |state, module, groups| unsafe {
         crate::panel::open(state, module, groups, crate::panel::answer::<A>)
     };
@@ -491,7 +491,7 @@ impl Host {
     /// The tray menu, or the card's context menu: the same list, from the same code.
     #[must_use]
     pub fn popup_menu(&mut self, at_screen: (i32, i32), st: tray::MenuState) -> Option<Command> {
-        self.tray.as_mut().and_then(|t| t.show_menu(at_screen, st))
+        self.tray.as_mut().and_then(|t| t.show_menu(at_screen, &st))
     }
 
     pub fn set_tooltip(&mut self, text: &str) {
@@ -644,7 +644,7 @@ impl Dialogs for Host {
     /// means.
     fn show_settings(&mut self, groups: Vec<Group>) {
         if self.settings_open() {
-            crate::panel::focus(self.panel);
+            unsafe { crate::panel::focus(self.panel) };
             self.sync_settings(&groups);
             return;
         }
@@ -655,7 +655,7 @@ impl Dialogs for Host {
 
     fn sync_settings(&mut self, groups: &[Group]) {
         if self.settings_open() {
-            crate::panel::refresh(self.panel, groups.to_vec());
+            unsafe { crate::panel::refresh(self.panel, groups.to_vec()) };
         }
     }
 

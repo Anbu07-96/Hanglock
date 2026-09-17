@@ -1026,7 +1026,7 @@ fn diag_habits(m: &Model, settings: &Settings) -> String {
     let mut out = String::new();
     out.push_str(&format!(
         "  clock           {}\n",
-        face_summary(settings, &m)
+        face_summary(settings, m)
     ));
     out.push_str(&format!(
         "  mouse           {} ({})\n",
@@ -1444,7 +1444,7 @@ mod tests {
         });
         assert!(acts.contains(&Action::Move(m.layout_frame)));
         assert!(
-            (m.rope.card_centre() - before).len() < 1e-9,
+            m.rope.card_centre().sub(before).len() < 1e-9,
             "the card moved with the window; the rope is what should carry it"
         );
         assert!(
@@ -1731,7 +1731,7 @@ mod tests {
         let mut m = model();
         m.settings.overlay.anchor_drop = 96.0;
         m.settings.general.launch_at_login = true;
-        let text = diag(&m.settings, &[], "read as written");
+        let text = diag(&m.settings, &[], &"read as written");
         for want in [
             "anchor",
             "drop 96.0",

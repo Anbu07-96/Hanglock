@@ -299,13 +299,12 @@ unsafe fn repaint(hwnd: sys::HWND, panel: &mut Panel) {
     let s = scale_of(hwnd);
     let w = WIDTH * s;
     let mut y = MARGIN * s;
-    let mut gi = 0usize;
     let mut ri = 0usize;
     // Cloned so the rows can be read while the children are created: a borrow of `panel.groups` and a
     // mutation of `panel.children` would otherwise fight, and the row set is a dozen small values that
     // are walked only when a command lands, not per frame.
     let groups = panel.groups.clone();
-    for group in &groups {
+    for (gi, group) in groups.iter().enumerate() {
         if panel.captions.len() <= gi {
             let cap = unsafe { make_plain_child(hwnd, panel, group.title, 0, false) };
             panel.captions.push(cap);
@@ -323,12 +322,11 @@ unsafe fn repaint(hwnd: sys::HWND, panel: &mut Panel) {
         }
         y += (CAP_H + 2.0) * s;
         for row in &group.rows {
-            sync_row(hwnd, panel, row, ri, y, w, s);
+            unsafe { sync_row(hwnd, panel, row, ri, y, w, s) };
             y += (row_height(row) + ROW_GAP) * s;
             ri += 1;
         }
         y += GROUP_GAP * s;
-        gi += 1;
     }
     if panel.close.is_null() {
         panel.close = unsafe { make_plain_child(hwnd, panel, "Close", ID_CLOSE, true) };
@@ -482,7 +480,7 @@ unsafe fn panel_font() -> sys::HFONT {
         if sys::SystemParametersInfoW(
             sys::SPI_GETICONTITLELOGFONT,
             std::mem::size_of::<sys::LOGFONTW>() as u32,
-            &mut lf as *mut _ as *mut core::ffi::c_void,
+            std::ptr::addr_of_mut!(lf).cast::<core::ffi::c_void>(),
             0,
         ) == 0
         {
@@ -521,7 +519,7 @@ pub unsafe fn open(
             // instead of a white card, without a `WM_CTLCOLORSTATIC` handler of our own.
             h_br_background: sys::GetSysColorBrush(sys::COLOR_BTNFACE),
             lpsz_class_name: name.as_ptr(),
-            ..unsafe { std::mem::zeroed() }
+            ..std::mem::zeroed()
         };
         if sys::RegisterClassExW(&wc) == 0 && sys::GetLastError() != sys::ERROR_CLASS_ALREADY_EXISTS
         {
@@ -559,7 +557,7 @@ pub unsafe fn open(
             on_answer,
         }));
         sys::SetWindowLongPtrW(hwnd, sys::GWLP_USERDATA, raw as isize);
-        let panel = unsafe { &mut *raw };
+        let panel = &mut *raw;
         repaint(hwnd, panel);
         sys::ShowWindow(hwnd, sys::SW_RESTORE);
         sys::SetForegroundWindow(hwnd);
@@ -570,7 +568,7 @@ pub unsafe fn open(
 /// Bring an open window to the front. The window is never re-created on a second `Settings…`, because
 /// a second window would be a second picture of the same rows, which is precisely what this file
 /// exists to prevent.
-pub fn focus(hwnd: sys::HWND) {
+pub unsafe fn focus(hwnd: sys::HWND) {
     unsafe {
         sys::ShowWindow(hwnd, sys::SW_RESTORE);
         sys::SetForegroundWindow(hwnd);
@@ -579,7 +577,7 @@ pub fn focus(hwnd: sys::HWND) {
 
 /// Replace the rows. Called after every command the model answers, from `Host` and from this window's
 /// own click path, so the picture is never one step behind the document.
-pub fn refresh(hwnd: sys::HWND, groups: Vec<Group>) {
+pub unsafe fn refresh(hwnd: sys::HWND, groups: Vec<Group>) {
     let ud = unsafe { sys::GetWindowLongPtrW(hwnd, sys::GWLP_USERDATA) };
     if ud == 0 {
         return;
@@ -708,7 +706,7 @@ pub unsafe fn answer<A: AppHook + 'static>(
     id: RowId,
     step: panel::Step,
 ) {
-    let rt = unsafe { &mut *(state as *mut Runtime<A>) };
+    let rt = unsafe { &mut *state.cast::<Runtime<A>>() };
     rt.app.panel_command(&mut rt.host, id, step);
 }
 

@@ -41,6 +41,7 @@ pub fn dir() -> PathBuf {
 }
 
 #[must_use]
+#[cfg(any(windows, test))]
 pub fn path() -> PathBuf {
     dir().join(FILE)
 }
@@ -174,6 +175,7 @@ pub fn load() -> (Settings, Outcome) {
 
 /// Persist into `dir`, creating it if needed. Three attempts, because the interesting failure is a
 /// momentary lock and the second failure is a user who will never see the third.
+#[cfg(any(windows, test))]
 pub fn save_at(dir: &Path, s: &Settings) -> Result<(), String> {
     let p = dir.join(FILE);
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -193,6 +195,7 @@ pub fn save_at(dir: &Path, s: &Settings) -> Result<(), String> {
 }
 
 /// Persist to the platform's own directory.
+#[cfg(any(windows, test))]
 pub fn save(s: &Settings) -> Result<(), String> {
     save_at(&dir(), s)
 }
@@ -209,6 +212,8 @@ pub fn display_path() -> &'static str {
     }
 }
 
+
+#[cfg(any(windows, test))]
 fn write_and_replace(tmp: &Path, p: &Path, bytes: &[u8]) -> Result<(), String> {
     std::fs::write(tmp, bytes).map_err(|e| format!("write: {e}"))?;
     #[cfg(windows)]

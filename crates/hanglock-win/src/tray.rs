@@ -134,13 +134,13 @@ impl Tray {
     /// that live *only* here are `Reset position` and `Exit`, which is the ratio a tray menu should
     /// have.
     #[must_use]
-    pub fn show_menu(&mut self, at: (i32, i32), st: MenuState) -> Option<Command> {
+    pub fn show_menu(&mut self, at: (i32, i32), st: &MenuState) -> Option<Command> {
         let menu = unsafe { sys::CreatePopupMenu() };
         if menu.is_null() {
             return None;
         }
         let mut plan = Plan::default();
-        plan.fill(menu, &st);
+        plan.fill(menu, st);
         let chosen = self.track(menu, at, &plan);
         unsafe { sys::DestroyMenu(menu) };
         chosen
