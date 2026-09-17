@@ -94,6 +94,78 @@ The tray icon's `NOTIFYICONDATAW` is hand-declared with a `size_of` assertion, a
 developer rather than writing past the end of a buffer on a user's machine. If the icon never appears:
 that is the failure mode, and `--diag` prints `tray_installed`.
 
+## The settings window, and the two kinds of dialog
+
+There are exactly two dialogs in the app, and they are deliberately different shapes, because the two
+have different amounts to lose.
+
+**About** is a `MessageBoxW`. It blocks, it is modal, and it needs no window of ours: the text cannot
+change while it is up, so there is nothing to keep in sync and nobody has to remember to close it. A
+hand-rolled About box would be a second thing to lay out, to font, to position and to keep from
+drifting.
+
+**Settings** is a real window — `RegisterClassExW` with our own procedure, and `BUTTON`/`STATIC`
+children — and it owns nothing. `hanglock-platform::panel::form` turns the applied `Settings` plus the
+live display list into groups of rows; the window draws those rows and reports a click as
+`(RowId, Step)`; the app turns that into the same `Command` the tray menu would have sent. So the
+window has no draft state, no Apply button, no validation and no copy of a value, which is the whole
+reason the tray and the window cannot end up describing different apps. The row set is fixed for a
+release, which is what lets a click be decoded by one division (`ID_BASE + row * 4 + part`) instead of
+a table that could go out of date.
+
+What a plain window buys over the obvious alternatives, each of which was rejected:
+
+* **`CreateDialogIndirectParamW` with a hand-built template.** Free fonts, free tab order — for a byte
+  encoding of `DLGITEMTEMPLATE` with alignment padding that no Linux CI can check, and a modal or
+  modeless loop that is not the one this process already runs.
+* **A comctl32 property sheet.** Tabs, for three sections that fit in one column. It also drags in a
+  v6 common-control manifest and an activation-context question, and `docs/research/` records what that
+  class of question cost the reference project. No UI framework, no new runtime: those were rules.
+* **`DefWindowProcW`'s defaults for a child's look.** Buttons draw themselves; that is the extent of
+  the platform's help, and it is enough.
+
+Three details are what make it not look like 1995, and each is a call rather than a style:
+
+* The font comes from `SystemParametersInfoW(SPI_GETICONTITLELOGFONT)` and `CreateFontIndirectW`. The
+  icon-title font is Segoe UI at the user's chosen size on every Windows this app supports.
+  `GetStockObject(DEFAULT_GUI_FONT)` — the usual suggestion — is the old 8 pt ANSI face, and a window
+  drawn in it reads as a bug report.
+* The window's height comes from the rows: `repaint` walks the groups, accumulates a client rect, and
+  hands it to `AdjustWindowRectEx` to add the caption and border. Guessing a border width breaks at
+  150 % scaling, and a bottom row that is 6 px short of the frame is a user who cannot reach `Close`.
+* `IsDialogMessageW` is called from the message loop, for the panel's messages only — gated on
+  `GetAncestor(msg.hwnd, GA_ROOT) == panel`. That one call is the entire keyboard support: Tab between
+  rows, arrows inside a radio group, Space to tick, Esc to close. It is gated because routing the
+  overlay's messages through a dialog manager could swallow the one message that keeps a drag alive.
+
+The window's state is a `Box<Panel>` parked in `GWLP_USERDATA`, the same arrangement the overlay uses
+for its `Runtime` and for the same reason: a window long cannot hold a reference, and the message loop
+cannot outlive the frame that owns the data. It is freed in `WM_NCDESTROY` rather than `WM_DESTROY`,
+after the children that were drawn with its font are gone, and the window long is cleared before the
+box is dropped so a message that arrives in between finds null and not a dangling pointer. The overlay's
+own answer to "is the settings window up?" is `IsWindow`, not a flag: the user can close it with its
+`x`, and no message about that reaches `Host`.
+
+A DPI change on this window re-runs the same `repaint`, because the layout is logical pixels times
+`GetDpiForWindow`: a clock that survives a monitor change while a settings window next to it does not
+would be the one part of the app that is not DPI-aware, which is a strange thing to read in a file
+about being DPI-aware.
+
+## Autostart, and what a checkbox is allowed to claim
+
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` is the *wish*. Windows keeps a second flag
+beside it: `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run`, which is
+what Task Manager's Startup page writes when a user clicks Disable on an entry that still exists. A
+checkbox that read only `Run` would say "on" while the system declined to start us — a lie that survives
+a restart, which is the worst kind this app can tell.
+
+So `is_enabled` is `entry exists && approved`, `apply()` answers with what a read after the write
+reports rather than with `Ok(())`, and *enabling* clears the `StartupApproved` value the way Task
+Manager's Enable button does. On startup `Model::on_ready` reconciles the document against the registry
+in the other direction: the registry wins, because a `Run` key we deleted by hand or disabled in Task
+Manager is a decision taken after the file was written, and re-adding the key at every logon would be
+the app overruling a person.
+
 ## DPI
 
 `SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)` resolved through `GetProcAddress` at startup,
@@ -142,3 +214,15 @@ one above the primary, and the clock on the one that gets removed.
 6. That `PresentRect` for the digits looks right when the minute rolls over `9:59 → 10:00` (the run gets
    wider: the union rect must cover the old glyphs too).
 7. `ReplaceFileW` in `store.rs` while an antivirus scanner holds `settings.toml` open.
+8. That the settings window opens from the tray and from the card's menu, is keyboard-navigable without
+   the mouse (Tab, arrows through a choice, Space, Esc), and that a nudge's `Less`/`More` are greyed at
+   the ends of their range rather than wrapping or clamping silently.
+9. That Alt+drag from the *middle of the plate* moves the hang point, that the window and the card
+   disagree for the duration of the gesture on purpose (the card follows on release, via `Relayout`),
+   and that the position survives a restart, a scale change and a monitor switch.
+10. That `Fully click-through` is refused while the tray icon is missing, that the refusal is readable in
+    the tooltip and as a greyed line in the menu, and that the mode arrives as soon as the icon appears.
+11. That disabling Hanglock in Task Manager's Startup page makes the checkbox read false at the next
+    start, and that ticking it there again survives our write.
+12. That `settings.toml` does not exist after a first run in which nothing was changed, and that a
+    corrupt file comes back as defaults plus one stderr line and a renamed `.corrupt-<ts>` original.

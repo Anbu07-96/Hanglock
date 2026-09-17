@@ -1,9 +1,19 @@
 # Hanglock MVP — scope and implementation plan
 
-> **Phase 1 status:** steps 0–7 and 9–10 of §3 are written (steps 8 and 11 are the context menu polish
-> and the release packaging), plus the face of step 10 and the whole test suite of §5 in
-> `docs/reports/phase-1.md`. Nothing has been compiled in this environment, so no exit test below is
-> marked passed. See [`reports/phase-1.md`](reports/phase-1.md).
+> **Phase 2 status:** steps 0–7, 9 and 10 of §3 are built and compile in CI, which is the only place
+> this repo is ever compiled: the Linux job runs fmt, clippy `-D warnings`, the suite and the
+> generated-artefact checks, and the two Windows jobs build and run the release binary at `x64` and
+> `arm64`. Step 8 (the card's context menu) shipped in Phase 1 and grew the same items the tray has;
+> step 11 (installer, `v0.1.0` tag) is deliberately not here yet, because the numbers it would publish
+> are the ones Phase 2 changed.
+>
+> Of §1, items 1–6 and 8–10 are now true as written. Two changed shape: item 6's click-through is three
+> named modes rather than one toggle, with a refusal built into the third; item 7's menu gained the
+> submenus, the mode names, `AM / PM`, the display choice and `Settings…`, and lost nothing. The
+> settings *window* — listed under "Out of MVP" when this plan was written — is built, because the
+> tray had stopped being able to hold the settings honestly: an anchor position is not a menu item.
+> The rest of §1 is unchanged, and §2's on-hardware definition of done is still owed: it needs a
+> desktop, which CI does not have. See [`reports/phase-2.md`](reports/phase-2.md).
 
 One sentence: **one hanging digital clock, real rope physics, drag and swing, an Always-on-Top
 toggle** — a thing that hangs off the top of a Windows desktop and tells the time.
@@ -16,20 +26,24 @@ toggle** — a thing that hangs off the top of a Windows desktop and tells the t
 2. Verlet cord with fixed 240 Hz timestep, stretch ceiling, sleep-when-settled.
 3. A clock card showing `10:42` + `PM` + optional `:07`, tabular figures, one face.
 4. Drag to swing; release carries momentum; settles in ~2 s.
-5. `Alt`+drag (or drag the bracket) to re-anchor along the top edge; position persisted.
-6. Per-pixel click-through everywhere except the card; hover shows an open hand.
-7. Tray icon + menu: Show/Hide, **Always on Top** (checkmark), Click-through, Size (5 steps),
-   Rope length (5 steps), 12/24 h, Seconds, Monitor, Reset position, Quit.
+5. `Alt`+drag (or drag the hang ring) to re-anchor along the top edge, and below it; position persisted
+   as a ratio and a drop, so it survives a scale change and a monitor switch.
+6. Per-pixel click-through everywhere except the card and the ring; hover shows an open hand, the ring
+   a move cursor; three named mouse modes, and the last one cannot be entered without the tray present.
+7. Tray icon + menu as the primary control surface: Show/Hide, **Always on Top**, Mouse ▸, Seconds,
+   12/24 h, AM/PM, How it swings ▸, Monitor ▸, the two size steps and two cord steps, **Reset
+   position**, Settings…, Start with Windows, About, Exit.
 8. `settings.toml` persistence with tolerant decode + atomic write.
 9. 60 Hz while swinging, 1 Hz while settled, 0 Hz while hidden.
 10. Per-Monitor V2 DPI awareness; re-anchor on display/DPI/taskbar changes; resync on resume.
-11. `cargo build/test/clippy` green on Linux + Windows CI; Inno Setup per-user installer;
+11. `cargo build/test/clippy` green on Linux + Windows `x64` + Windows `arm64` CI *(done, three jobs)*;
+    Inno Setup per-user installer *(not built: it publishes numbers this phase changed)*;
     README + CHANGELOG + LICENSE + PRIVACY + docs listed in `docs/index.md`.
 12. `--bench`/`--diag` flags that print the §8 numbers of `architecture.md`, so the claims are checkable.
 
 **Out of MVP (designed for, not built)** — modes (Timer/Stopwatch), faces beyond one, themes,
 custom ropes, analog, world clocks, dual-cord mount, global hotkeys, autostart-on-first-run,
-settings window, import of anything, sounds, blur/acrylic, screen-colour sampling, updater, MSIX,
+import of anything, sounds, blur/acrylic, screen-colour sampling, updater, MSIX,
 Store, macOS code, i18n beyond `en` (the layout must not hard-code "PM" width — that's the only
 i18n duty in MVP), Linux build, plugins.
 

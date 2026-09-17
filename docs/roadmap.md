@@ -25,6 +25,13 @@ broke. Kill-or-commmit: no physics, no typography, no settings beyond a hard-cod
 Rope solver → paint → card attitude → drag/throw/re-anchor → tray + settings → displays/power →
 face polish → Inno installer, `v0.1.0` with public measurements.
 
+**Built:** everything up to the installer, in the order that sentence gives — with the emphasis this
+phase actually needed on the last three arrows. The re-anchor is a persisted pair of numbers rather than
+a pixel; the tray is the control surface, with the mouse modes, the display choice and `Reset position`
+in it; the settings window draws rows the model derives, so it cannot disagree with the menu; and the
+file is only written once something changes. **Owed:** the installer, the tag, and every number in
+`mvp.md` §2 that needs a desktop. See [`reports/phase-2.md`](reports/phase-2.md).
+
 **Exit:** `mvp.md` §2 satisfied. **This is the first release anyone should install.**
 
 ## Phase 3 — It's a tool, not a clock

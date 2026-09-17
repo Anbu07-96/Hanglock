@@ -5,7 +5,10 @@ from the top edge of the desktop on a real rope — draggable, swingable, click-
 isn't drawn, and near-zero cost while you ignore it.
 
 **Status.** Phase 1 delivered the first prototype: the workspace, the solver, the painter, the Win32
-overlay, the tray, the settings store, and 60 tests. Every gate this repo has is green in CI, whose three
+overlay, the tray, the settings store. Phase 2 made it usable: the hang point is now a pair of numbers
+the file can hold and Alt+drag can move, the mouse has three named modes with a refusal built into one of
+them, the tray grew into the control surface, and a small native settings window draws the rows the
+model derives. The suite is 110 tests. Every gate this repo has is green in CI, whose three
 jobs cover Linux, Windows `x64` and Windows `arm64`: fmt and clippy `-D warnings`, the suite including the
 golden trace, both generated artefacts against their generators, and on Windows the release link, a
 headless run of the binary and a 2 048 KB size gate it meets at 312 KB (`x64`) / 271 KB (`arm64`). The
@@ -28,17 +31,18 @@ trace keeps the shipped solver honest to it.
 | [gate-a.md](gate-a.md) | The measurement gate: what was measured, the cost geometry, what is owed on hardware |
 | [windows-overlay-notes.md](windows-overlay-notes.md) | The Win32 reality: layered windows, per-pixel hit testing, DPI, the tray, and a verify list |
 | [reports/phase-1.md](reports/phase-1.md) | What the first prototype is, what it does not do yet, and what to review |
+| [reports/phase-2.md](reports/phase-2.md) | What became usable, what was refused, and what is still owed on a desktop |
 
 
 | `PRIVACY.md` *(with 0.1)* | No network, no telemetry, one settings file — with the command that proves it |
 
 ## Reading order for a new contributor
 
-1. `reports/phase-1.md` — what exists, and the one caveat that matters.
+1. `reports/phase-2.md` — what exists now, and the one caveat that matters.
 2. `mvp.md` §1 (in/out) — so you know what not to build yet.
-2. `architecture.md` §1–§3 — the rules and the one-direction data flow.
-3. `research/ip-boundaries.md` §1 — the short list of things that will get the repo into trouble.
-4. Pick a task from `mvp.md` §3 or `roadmap.md`, and open a draft PR before writing code.
+3. `architecture.md` §1–§3 — the rules and the one-direction data flow.
+4. `research/ip-boundaries.md` §1 — the short list of things that will get the repo into trouble.
+5. Pick a task from `mvp.md` §3 or `roadmap.md`, and open a draft PR before writing code.
 
 ## Conventions
 

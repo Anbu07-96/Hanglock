@@ -49,7 +49,7 @@ Hanglock/
 │   │   src/{lib.rs, painter.rs, cord.rs, card.rs, glyphs.rs, atlas.rs, theme.rs, measure.rs}
 │   ├── hanglock-platform/      # traits only, no implementation
 │   │   └── src/{lib.rs, overlay.rs, presenter.rs, clock.rs, input.rs, tray.rs, display.rs, power.rs}
-│   └── hanglock-win/           # the only `unsafe`, the only Windows import
+│   └── hanglock-win/           # the `unsafe`, the Windows imports
 │       ├── src/{lib.rs, window.rs, wndproc.rs, layered.rs, hit.rs, tray.rs, dpi.rs,
 │       │        displays.rs, timer.rs, hotkeys.rs, autostart.rs, appmanifest.rs}
 │       └── assets/manifest.manifest   # PMv2 DPI awareness + LongPathAware
@@ -73,10 +73,22 @@ Hanglock/
 └── CHANGELOG.md CONTRIBUTING.md SECURITY.md LICENSE THIRD-PARTY-NOTICES.md README.md
 ```
 
+The tree above is the plan from Phase 0 and it has drifted, as plans do; the shipped `src/` trees are
+the truth. The differences worth knowing before you look for a file: `render`'s `glyphs.rs`/`atlas.rs`
+became `face_data.rs`/`text.rs` (the digits are drawn from generated geometry, so there is no atlas),
+`win`'s `hotkeys.rs` and `appmanifest.rs` were never needed (global hotkeys are Phase 4, and DPI
+awareness is set by call, not by manifest), `platform` is one `lib.rs` plus the settings form in
+`panel.rs`, and the app crate is `main.rs` / `model.rs` / `store.rs` / `app.rs`. Phase 2 added
+`core/src/anchor.rs` (the hang point, and what dragging it means) and `win/src/panel.rs` (the settings
+window as a renderer of rows).
+
 Three rules the layout enforces:
 
 * `hanglock-win` is the only crate that may `unsafe` or link a Windows API. `deny`-level clippy at
-  the workspace root, `#![forbid(unsafe_code)]` in the other three.
+  the workspace root, `#![forbid(unsafe_code)]` in the other three. The one exception is deliberate and
+  measured: the app crate's `store.rs` calls `ReplaceFileW`, because atomically replacing a file another
+  process may have open is a thing only the OS can do, and the `unsafe` there is four lines inside one
+  `#[cfg(windows)]` function rather than a seam with a trait under it.
 * `hanglock-render` depends on `hanglock-core` types only. It cannot see a window, a device or a clock.
 * A `macos` backend later is `crates/hanglock-macos` implementing the same traits, reusing core +
   render unchanged. Nothing in core/render may grow a `#[cfg(windows)]`.
@@ -178,16 +190,26 @@ Hangly's `0.999` on purpose: a tool should settle in ~2 s, not swing for 40).
 | Input | Result |
 |---|---|
 | Press on card → move → release | Drag the card; on release it carries the pointer velocity, swings, settles. Rope stays taut, never stretches |
-| Press on card + `Alt`, or press the bracket knot | **Re-anchor**: the whole assembly translates; the anchor follows the pointer's x along the top edge (y fixed). Release commits `anchor_monitor` + `anchor_x` |
-| Double-click card | Toggle seconds display (and consume the click so it isn't a drag) |
+| Press on card + `Alt`, anywhere on the plate | **Re-anchor**: the window follows the pointer, the anchor becomes `(anchor_ratio, anchor_drop)` — x as a fraction of the usable width, y as a drop below the hang line — and the card settles under it on release. Both numbers are quantised to the four decimals the file writes, so what is on screen, what is saved and what the next build reads are the same position |
+| Press on the hang ring, no modifier | The same gesture, for a pointer that was already aimed at it |
+| Double-click card | *Not built in v0.1*: the input has no double-click, and `WM_LBUTTONDBLCLK` would have to be claimed from the drag grammar that already works |
 | Right-click card | Context menu: mode (Clock only in MVP), Always on Top, Click-through, Show/Hide, Size, Settings…, Quit |
 | Wheel over card | Rope length −/+ (hang distance), 6 discrete steps; re-fits the window height |
-| Wheel + `Ctrl` over card | Card scale (size) |
+| Wheel + `Ctrl` over card | *Not built in v0.1*: size is a tray and settings step, so no modifier state has to be read outside the re-anchor |
 | Hover over card | `WM_SETCURSOR` → open hand; closed hand while dragging; `IDC_SIZEWE`-style near the bracket. No global polling, no cursor-API churn |
 | `Ctrl+Alt+H` (Phase 4) | Show/hide. Global hotkeys are deliberately not MVP: they carry a different user expectation and, on macOS later, a different permission story |
 
-`Click-through = Always off` (the whole window becomes `HTTRANSPARENT`, for users who want the clock
-purely decorative) and `Click-through = Hover-only` (default) are the only two values in MVP.
+Three mouse modes ship, because two of them were a trap:
+
+| `click_through` | Menu says | What the window does |
+|---|---|---|
+| `solid` | Interactive (whole window) | The plate's rectangle answers every click, empty pixels included. For a card over a busy background where the anti-aliased edge kept stealing a click |
+| `hover` | Transparent areas click through | The default: the plate and the hang ring take clicks, everything else in the window is `HTTRANSPARENT` |
+| `always` | Fully click-through | `WS_EX_TRANSPARENT` as well, so the overlay is not a target at all — and the tray becomes the only way back, which is why the model refuses this mode while no tray icon is installed and says so in the tooltip |
+
+The refusal is the interesting part: a setting that can make the app unreachable is a setting the app is
+not allowed to persist without an exit. `Model::on_ready` re-checks it at startup, because a file copied
+from a machine where the icon installed cleanly is not a promise that this one will.
 
 ### 5.5 Wake/sleep state machine
 
@@ -210,28 +232,44 @@ Hidden ──enable──▶ Armed(0 fps, no timer) ──pointer near/hover/sec
 One TOML document, `%APPDATA%\Hanglock\settings.toml`, written atomically
 (temp + `ReplaceFileW`/rename-with-retry), only when the in-memory value actually differs.
 
+The document as written, from `Settings::to_toml` with the defaults `Settings::default` holds — the
+shipped keys, not a sketch of them:
+
 ```toml
+# Hanglock settings. Ranges are enforced on load; unknown keys are ignored.
 schema = 1
+
 [overlay]
 enabled = true
-monitor = "primary"        # MonitorId: "primary" | "\\.\DISPLAY2" | index
-anchor_x_ratio = 0.5       # 0..1 along the monitor's top edge; survives resolution changes
-hang_px = 160              # rope length in logical px, 5 steps
-scale = 1.0                # 0.7..1.6
+monitor_index = 0          # which display to hang from, by enumeration index
+anchor_ratio = 0.5         # 0..1 across the usable width; survives resolution and scale changes
+anchor_drop = 0.0          # logical px below the hang line; 0 is "from the edge"
+hang = 150.0               # cord length in logical px, 70..260, six steps the tray and window share
+scale = 1.0                # 0.75..1.75
 opacity = 1.0              # 0.35..1.0
 topmost = true
-click_through = "hover"    # "hover" | "always"
+click_through = "hover"    # "solid" | "hover" | "always"
 respect_taskbar = true
+margin = 16.0              # the slack around the swept box
+
 [face]
-mode = "clock"             # clock | timer | stopwatch   (only clock in MVP)
-face = "hanglock.mono"     # registry id; one face in MVP
 hour12 = true
-show_seconds = true
-show_ampm = true
-legibility = "sign"        # natural | sign | locked
-[sound] enabled = false       # deliberately off by default, unlike Hangly
-[general] launch_at_login = false   # reconciled against the registry at startup
+seconds = false
+meridiem = true
+posture = "plate"          # "natural" | "plate" | "mounted" | "locked"
+
+[general]
+launch_at_login = false    # reconciled against the registry, including StartupApproved
+fps_cap = 60
 ```
+
+Two rules about writing it matter more than the keys. The file is not created by a first run: nothing is
+written until a command changes something, so an app the user tried once and closed leaves no file
+behind. And `anchor_ratio` / `anchor_drop` are stored quantised to these four decimals — `Anchor::clamped`
+rounds to the writer's unit — because a position the writer cannot express is a position that moves when
+the file is saved, and `from_toml(to_toml(s)) == s` is worth more than the eighth decimal of a pixel.
+The `Cord` row is `hang`, and it is one of six rungs rather than a continuous value, so the tray's two
+menu items and the window's two buttons can never disagree about what the next step is.
 
 Rules (each one exists because someone will hit it):
 
@@ -312,7 +350,8 @@ light + HDR on · `msctf`/IME active for a CJK layout (proves we never steal foc
 | Timer / Stopwatch | `ModeId` + `enum FacePayload` in `Scene`; `core::clock::timer` types already reserved; the renderer already draws "a card with fields", so a mode switch is one payload swap |
 | Many faces | `trait Face { fn layout(&self, &FaceCtx) -> SceneFragment }` registered by `FaceId`; faces are code, not markup, so they stay in the test suite and the budget |
 | Themes / rope styles | `theme::Palette` + `rope::Style` (width, twist, material) already consumed by the painter; a rope material is a stroke recipe |
-| Custom hang points (top-left corner, off-centre) | `anchor_offset` is already in `RopeSim` (the pivot is a parameter of `CardRig`) |
+| Custom hang points (top-left corner, off-centre) | `anchor_offset` is already in `RopeSim` (the pivot is a parameter of `CardRig`), and `core::anchor::Anchor` is the pair the file holds and the gesture produces |
+| A second settings surface (another platform, or a `--set` flag) | `hanglock-platform::panel` owns the form: `form(&Settings, &[Monitor])` draws the rows and `change(&Settings, RowId, Step)` answers a click with a `Command`. A surface that builds its own row list or its own mapping is the drift this seam exists to prevent. The window is drawn from `form`; the tray menu is its own list of items, because a menu is not a form — but both end in a `Command`, and `Command` is the only vocabulary a surface has for asking, which is the half of the arrangement that actually has to hold |
 | Multiple clocks (e.g. two world clocks) | `OverlayHost` is keyed by `OverlayId`; App holds a small map. Not in MVP, but the window owner must not be a global for this to stay cheap |
 | macOS backend | `hanglock-macos` implementing the same traits with `NSWindow` + `NSView`/CoreGraphics; `hanglock-platform` exists so `core`/`render` never learn what an HWND is |
 | Alarms / focus sessions | `core::clock` is already a state machine driven by an injected `TimeSource`; scheduling is a new service, not a new model |

@@ -14,17 +14,20 @@ it is designed to cost about nothing while you ignore it.
         │  cord (real Verlet physics, 240 Hz)
         │
       ┌─┴──────────────┐
-      │    10:42 PM    │   ← you can grab this
-      └────────────────┘
+      │    10:42 PM    │   ← grab this to swing it
+      └────────────────┘        Alt+drag anywhere, or drag the knot, to move where it hangs from
 ```
 
-**Status: the first prototype compiles, passes its tests and produces its binary in CI.** Every gate this
-repo has is green, across three jobs — Linux, Windows `x64`, Windows `arm64`: fmt and clippy
-`-D warnings`, 60 tests including a golden trace against the reference model, the generated artefacts
-checked against their generators, and on Windows the release link, a headless run of the built executable
-and a 2 048 KB size gate it meets at 312 KB (`x64`) / 271 KB (`arm64`). What CI cannot measure — a
-desktop, a tray, a real DPI change, idle CPU and RAM — is stated as owed in
-[docs/gate-a.md](docs/gate-a.md); the phase's record is [docs/reports/phase-1.md](docs/reports/phase-1.md).
+**Status: a usable Windows clock, not a demo of one.** It hangs, it swings, the tray is the control
+surface, the mouse has three modes you can name, and the settings live in a window you can find with the
+keyboard. Everything the repo can check without a desktop is checked in CI — three jobs, Linux and
+Windows `x64` and `arm64`: fmt, clippy `-D warnings`, the suite (a golden trace against the reference
+model, the placement and anchor maths, the settings round-trip, the recovery paths, the row form), both
+generated artefacts against their generators, and on Windows the release link, a headless run of the built
+executable and a 2 048 KB size gate. What CI cannot measure — a real tray, a real DPI change, idle CPU and
+RAM, whether it *feels* right — is stated as owed in [docs/gate-a.md](docs/gate-a.md); the phase records are
+[docs/reports/phase-1.md](docs/reports/phase-1.md) and
+[docs/reports/phase-2.md](docs/reports/phase-2.md).
 
 <img src="docs/previews/01-settled-light.png" width="440" alt="Hanglock's clock plate hanging from a ceiling clamp on a twisted cord, reading 10:42 PM"> <img src="docs/previews/03-settled-dark.png" width="440" alt="The same clock on a dark desktop wallpaper, kept legible by a one-pixel rim light">
 
@@ -35,6 +38,7 @@ desktop, a tray, a real DPI change, idle CPU and RAM — is stated as owed in
 cargo build --release -p hanglock          # Windows: the overlay
 cargo run -p hanglock -- --dump-scene a.png # any OS: the frame it would paint
 cargo run -p hanglock -- --bench 400        # any OS: per-frame cost
+cargo run -p hanglock -- --diag             # any OS: settings, placement, DPI, budgets
 cargo test --workspace                      # any OS: the solver, placement, settings
 ```
 
@@ -47,11 +51,26 @@ cargo test --workspace                      # any OS: the solver, placement, set
   when it settles: one small repaint per second, not a frame clock.
 * **Native.** Windows 10/11 first, `x64` + `arm64`, per-monitor DPI, tray-resident, no installer bloat.
 
-## Planned MVP
+## The MVP, as built
 
-One hanging digital clock + real rope physics + drag/swing + an Always-on-Top toggle + persisted
-settings. Nothing else — faces, themes, rope styles, timer, stopwatch and analog are specified for
-later phases but not built yet. See [docs/mvp.md](docs/mvp.md).
+One hanging digital clock, real rope physics, drag and throw, Always-on-Top, and persisted settings —
+plus the four things that turned out to be what a daily utility needs:
+
+* **Where it hangs is a setting, not an accident.** Alt+drag moves the hang point anywhere on the
+  display; it is stored as a fraction of the width and a drop below the edge, so a scale change, a
+  monitor switch and a restart all keep it. `Reset position` in the tray puts it back, and works even
+  when the clock cannot be clicked.
+* **Three mouse modes, named after what they do.** *Interactive (whole window)*, *Transparent areas
+  click through* (the default), and *Fully click-through*. The third one is refused while the tray icon
+  is not installed, because a clock that swallows nothing must still have a way to be told to stop.
+* **The tray is the control surface, and the settings window draws the same list.** A row of that window
+  and an item of that menu are the same `Command` on the same model, which is why they cannot show you
+  two different apps. There is no Apply button, because every row is one already-valid click.
+* **Nothing is written until you change something.** A first run leaves no file; a corrupt file comes
+  back as defaults with one line on stderr and the original kept beside it.
+
+Faces, themes, rope styles, timer, stopwatch and analog are specified for later phases and not built.
+See [docs/mvp.md](docs/mvp.md).
 
 ## Stack
 

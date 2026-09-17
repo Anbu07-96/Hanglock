@@ -18,6 +18,18 @@ will be about scope, not quality.
 Open an issue before writing code for anything larger than a bug fix. A physics change, a new setting,
 or a new window behaviour is a design change and deserves five minutes of agreement first.
 
+## Adding a setting
+
+Four places, in this order, and they are the whole recipe: `settings.rs` (the field, its limit in
+`limits`, its `sanitize` arm, its two `to_toml`/`from_toml` arms — `SCHEMA` does *not* go up for a new
+key, because a missing key is a default and not a migration), `ids.rs` if it is an enumeration (with
+`label()` and `ALL`, which is what every menu will show), `Command` in `hanglock-platform` plus its arm
+in `Model::on_command`, and `panel::form` + `panel::change` so the settings window and the tray both
+offer it. Then a test each in `core/tests/settings.rs` (round-trip and defaults) and
+`hanglock-platform/tests/panel.rs` (the row exists, and clicking it produces that command). A setting
+that skips the last step is a setting only a hand-edited file can reach; one that skips the `form` step
+is a setting the window lies about.
+
 ## House style
 
 * `hanglock-core` and `hanglock-render` are `#![forbid(unsafe_code)]` and dependency-free. If a change
