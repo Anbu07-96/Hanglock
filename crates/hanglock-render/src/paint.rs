@@ -376,8 +376,15 @@ fn paint_plate(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
     let radius = scene.card_w.min(scene.card_h) * 0.5;
     let shadow = theme.shadow_alpha * scene.opacity;
     let extent = radius + theme.shadow_blur * scene.scale + 3.0;
-    box_shadow(cv, c, Vec2::new(radius, radius), radius, theme.shadow_drop * scene.scale,
-        theme.shadow_blur * scene.scale, shadow);
+    box_shadow(
+        cv,
+        c,
+        Vec2::new(radius, radius),
+        radius,
+        theme.shadow_drop * scene.scale,
+        theme.shadow_blur * scene.scale,
+        shadow,
+    );
     let x0 = (c.x - extent).floor() as i64;
     let x1 = (c.x + extent).ceil() as i64;
     let y0 = (c.y - extent).floor() as i64;
@@ -388,25 +395,36 @@ fn paint_plate(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
             let p = centre(x as i32, y as i32);
             let d = p.dist(c) - radius;
             let cov = smooth(0.55, -0.55, d);
-            if cov <= 0.0005 { continue; }
+            if cov <= 0.0005 {
+                continue;
+            }
             let t = ((p.y - (c.y - radius)) / (2.0 * radius)).clamp(0.0, 1.0);
             let lerp = |u: f64, v: f64| u + (v - u) * t;
             let edge = d.abs();
             let (r, g, bch, al) = if edge < 1.3 {
                 (theme.rim.r, theme.rim.g, theme.rim.b, theme.rim.a)
             } else {
-                (lerp(theme.plate_top.r, theme.plate_bottom.r),
-                 lerp(theme.plate_top.g, theme.plate_bottom.g),
-                 lerp(theme.plate_top.b, theme.plate_bottom.b),
-                 lerp(theme.plate_top.a, theme.plate_bottom.a))
+                (
+                    lerp(theme.plate_top.r, theme.plate_bottom.r),
+                    lerp(theme.plate_top.g, theme.plate_bottom.g),
+                    lerp(theme.plate_top.b, theme.plate_bottom.b),
+                    lerp(theme.plate_top.a, theme.plate_bottom.a),
+                )
             };
             let a2 = al * cov * scene.opacity;
-            cv.blend(x as i32, y as i32, (bch*255.0*a2) as u16,
-                (g*255.0*a2) as u16, (r*255.0*a2) as u16, (a2*255.0) as u16);
+            cv.blend(
+                x as i32,
+                y as i32,
+                (bch * 255.0 * a2) as u16,
+                (g * 255.0 * a2) as u16,
+                (r * 255.0 * a2) as u16,
+                (a2 * 255.0) as u16,
+            );
         }
-        cv.touch_row(y as i32, x0.max(0) as i32, x1.min(w_-1) as i32);
+        cv.touch_row(y as i32, x0.max(0) as i32, x1.min(w_ - 1) as i32);
     }
 }
+
 pub fn paint(scene: &Scene, cv: &mut Canvas, theme: &Theme) {
     cv.clear();
     let n = scene.node_count as usize;

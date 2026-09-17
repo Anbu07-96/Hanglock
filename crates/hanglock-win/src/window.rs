@@ -879,7 +879,6 @@ unsafe fn on_pointer<A: AppHook + 'static>(
             unsafe { sys::ReleaseCapture() };
             host.captured = false;
             let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
-            let f = host.frame;
             app.on_input(
                 host,
                 Input::Release {
