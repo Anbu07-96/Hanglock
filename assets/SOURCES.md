@@ -65,3 +65,4 @@ regenerated glyph set in `tools/model/gen_face.py`. Regenerate with
 | `docs/previews/phase-2.5/slate-scale-ladder.png` | Slate at scale 0.75, 1.00, 1.40 and 1.75 with the same hang: corner radius, mount, eyelet, cord and cap all grow with the card, which is the property `Settings::card()` does not have. | CC0 |
 | `docs/previews/phase-2.5/face-concepts.png` | The proposed face: the digit set at two sizes, then three rows showing the fit rule at 5, 8 and 5 glyphs on one card width. | CC0 |
 | `docs/previews/phase-2.5/footprint.png` | Today's swept window (red, 520x269 around a 252x96 card, containing the shipped render) beside each concept's, from `placement::swept_box`'s own formula. | CC0 |
+| `docs/previews/phase-2.5/today-launch-frame.png` | The first frame the shipped painter produces at the shipped defaults: `hanglock_ref.py render` at step 0, 17.2 degrees off vertical, so the composition on launch is documented rather than imagined. | CC0 |

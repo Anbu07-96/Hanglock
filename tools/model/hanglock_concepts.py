@@ -558,6 +558,19 @@ def face_sheet(path):
     write_png(path, W, H, flatten(cv, (250, 250, 248)), 3)
 
 
+def today_first_frame(path):
+    """The frame the app actually paints first, from the shipped renderer, unaltered.
+
+    Committed here because it is the evidence for the launch-composition finding: `hanglock_ref.py
+    render` writes this as `00_rest`, and it is the one frame nobody reviewed - `01-settled-light.png`
+    in Phase 1 is the settled, flattering one. At the shipped `initial_angle` of 0.30 rad the card
+    appears 17.2 degrees off vertical, ~44 px sideways of its anchor, with the cord a diagonal.
+    """
+    from hanglock_ref import new_sim, render
+    cv, bg = render(new_sim(), "10:42", "PM")
+    write_png(path, cv.w, cv.h, cv.over_solid(bg), 3)
+
+
 def cmd_all(out):
     os.makedirs(out, exist_ok=True)
     names = ("slate", "glass", "thread")
@@ -571,6 +584,7 @@ def cmd_all(out):
     stack(f"{out}/concepts-seconds.png", names, "14:53:07", "PM", DARK_BG)
     ladder(f"{out}/slate-scale-ladder.png", "slate")
     face_sheet(f"{out}/face-concepts.png")
+    today_first_frame(f"{out}/today-launch-frame.png")
     footprint(f"{out}/footprint.png")
     print("concepts ->", out)
 
