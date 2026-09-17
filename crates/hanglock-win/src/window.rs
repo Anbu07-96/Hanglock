@@ -267,15 +267,11 @@ unsafe fn spawn_window<A: AppHook + 'static>(
     }
 }
 
-/// Create the overlay, wire it to `app`, and run the message loop. Returns the process exit code.
-pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
-    // Must happen before any window is created: after the first window exists the process's DPI
-    // context is fixed, and setting it later silently succeeds while changing nothing.
-    unsafe {
-        sys::apply_dpi_awareness();
-    }
-    let instance = unsafe { sys::GetModuleHandleW(std::ptr::null()) };
-    let mut rt = Runtime {
+/// The `Runtime`, before it has a window: everything the overlay owns starts empty here, and the parts
+/// that cannot be defaulted — the frame from the config, and the panel constructor the app crate installs
+/// once `A` is known — are set by [`run`], which is where those inputs exist.
+fn new_runtime<A: AppHook + 'static>(app: A, cfg: &OverlayConfig) -> Runtime<A> {
+    Runtime {
         app,
         host: Host {
             hwnd: std::ptr::null_mut(),
@@ -297,7 +293,18 @@ pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
             captured: false,
             exit: 0,
         },
-    };
+    }
+}
+
+/// Create the overlay, wire it to `app`, and run the message loop. Returns the process exit code.
+pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
+    // Must happen before any window is created: after the first window exists the process's DPI
+    // context is fixed, and setting it later silently succeeds while changing nothing.
+    unsafe {
+        sys::apply_dpi_awareness();
+    }
+    let instance = unsafe { sys::GetModuleHandleW(std::ptr::null()) };
+    let mut rt = new_runtime(app, &cfg);
     let me: *mut Runtime<A> = &mut rt;
 
     let f = cfg.frame;
@@ -348,8 +355,7 @@ pub fn run<A: AppHook + 'static>(app: A, cfg: OverlayConfig) -> i32 {
         // swallowed one message while the pointer was over the clock would show up as a dropped drag.
         let mut handled = false;
         unsafe {
-            if !rt.host.panel.is_null()
-                && sys::GetAncestor(msg.hwnd, sys::GA_ROOT) == rt.host.panel
+            if !rt.host.panel.is_null() && sys::GetAncestor(msg.hwnd, sys::GA_ROOT) == rt.host.panel
             {
                 handled = sys::IsDialogMessageW(rt.host.panel, &msg) != 0;
             }
@@ -516,7 +522,6 @@ impl Host {
     }
 }
 
-
 impl OverlayHost for Host {
     fn set_topmost(&mut self, topmost: bool) {
         if self.topmost == topmost {
@@ -587,7 +592,11 @@ impl OverlayHost for Host {
         unsafe {
             let ex = sys::GetWindowLongPtrW(self.hwnd, sys::GWL_EXSTYLE);
             let bit = sys::WS_EX_TRANSPARENT as isize;
-            let next = if mode.ignores_input() { ex | bit } else { ex & !bit };
+            let next = if mode.ignores_input() {
+                ex | bit
+            } else {
+                ex & !bit
+            };
             if next != ex {
                 sys::SetWindowLongPtrW(self.hwnd, sys::GWL_EXSTYLE, next);
             }
@@ -678,7 +687,6 @@ impl Dialogs for Host {
         }
     }
 }
-
 
 /// The one window procedure. Every branch here either translates an OS event into something the
 /// model understands, or answers a question the model can answer cheaply.

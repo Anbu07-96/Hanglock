@@ -196,7 +196,11 @@ fn a_drop_moves_the_hang_point_down_one_logical_px_per_px() {
     };
     // Zero is "as high as the display allows", which is the clamp's own inset, not the edge: the
     // hardware the cord runs through would otherwise be cut off.
-    assert!((line(0.0) - 14.0).abs() < 1e-9, "at the inset: {}", line(0.0));
+    assert!(
+        (line(0.0) - 14.0).abs() < 1e-9,
+        "at the inset: {}",
+        line(0.0)
+    );
     for drop in [40.0, 100.0, 250.0] {
         let got = line(drop);
         assert!(
@@ -253,5 +257,9 @@ fn a_short_display_floors_the_drop_at_the_inset_instead_of_failing() {
         p.anchor,
         p.frame
     );
-    assert!(p.frame.y0 >= 0.0 && p.frame.y1 <= 300.0 + 0.001, "{:?}", p.frame);
+    assert!(
+        p.frame.y0 >= 0.0 && p.frame.y1 <= 300.0 + 0.001,
+        "{:?}",
+        p.frame
+    );
 }

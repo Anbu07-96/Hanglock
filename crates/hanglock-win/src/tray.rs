@@ -48,12 +48,6 @@ pub struct MenuState {
     pub notice: Option<&'static str>,
 }
 
-/// A `CreatePopupMenu` that failed is a null handle; this turns "keep going without the submenu" into
-/// a plain `Option`, so one dead handle never leaves the parent menu holding a popup with no children.
-fn non_null(h: sys::HMENU) -> Option<sys::HMENU> {
-    (!h.is_null()).then_some(h)
-}
-
 impl Tray {
     #[must_use]
     /// # Safety
@@ -141,123 +135,26 @@ impl Tray {
     /// have.
     #[must_use]
     pub fn show_menu(&mut self, at: (i32, i32), st: MenuState) -> Option<Command> {
-        let mut items: Vec<(usize, Command)> = Vec::with_capacity(24);
-        let mut n: usize = 0;
         let menu = unsafe { sys::CreatePopupMenu() };
         if menu.is_null() {
             return None;
         }
-        // One macro rather than a helper closure: `menu`, `items` and the running id all belong to this
-        // body's scope, and an item is the same four words every time — a label, a command, whether it
-        // is ticked, and whether it can be picked at all.
-        macro_rules! item {
-            ($parent:expr, $label:expr, $cmd:expr, $checked:expr) => {
-                item!($parent, $label, $cmd, $checked, true)
-            };
-            ($parent:expr, $label:expr, $cmd:expr, $checked:expr, $on:expr) => {{
-                n += 1;
-                let id = ID_BASE + n;
-                let mut flags = sys::MF_STRING;
-                if $checked {
-                    flags |= sys::MF_CHECKED;
-                }
-                if !$on {
-                    flags |= sys::MF_GRAYED;
-                }
-                let text = sys::wide($label);
-                unsafe {
-                    sys::AppendMenuW($parent, flags, id, text.as_ptr());
-                }
-                items.push((id, $cmd));
-            }};
-        }
-        // A greyed line with no id behind it: it can be read and cannot be chosen, which is what a
-        // refusal deserves. Returning 0 for it can never match, since ids start above `ID_BASE`.
-        macro_rules! note {
-            ($label:expr) => {{
-                let text = sys::wide($label);
-                unsafe {
-                    sys::AppendMenuW(menu, sys::MF_STRING | sys::MF_GRAYED, 0, text.as_ptr());
-                }
-            }};
-        }
-        macro_rules! sep {
-            ($parent:expr) => {
-                unsafe {
-                    sys::AppendMenuW($parent, sys::MF_SEPARATOR, 0, std::ptr::null());
-                }
-            };
-        }
-        macro_rules! submenu {
-            ($title:expr) => {{
-                let sub = unsafe { sys::CreatePopupMenu() };
-                if !sub.is_null() {
-                    let text = sys::wide($title);
-                    unsafe {
-                        sys::AppendMenuW(menu, sys::MF_POPUP, sub as usize, text.as_ptr());
-                    }
-                }
-                sub
-            }};
-        }
-        if let Some(what) = st.notice {
-            note!(what);
-            sep!(menu);
-        }
-        item!(menu, "Show clock", Command::ToggleVisible, st.visible);
-        sep!(menu);
-        item!(menu, "Always on top", Command::ToggleTopmost, st.topmost);
-        let mouse = format!("Mouse: {}", st.click_through.label());
-        if let Some(sub) = non_null(submenu!(&mouse)) {
-            for c in ClickThrough::ALL {
-                item!(sub, c.label(), Command::SetClickThrough(c), st.click_through == c);
-            }
-        }
-        item!(menu, "Show seconds", Command::ToggleSeconds, st.seconds);
-        item!(menu, "12-hour time", Command::Toggle12Hour, st.hour12);
-        item!(
-            menu,
-            "AM / PM",
-            Command::ToggleMeridiem,
-            st.meridiem,
-            st.hour12
-        );
-        let swing = format!("How it swings: {}", st.posture.label());
-        if let Some(sub) = non_null(submenu!(&swing)) {
-            for p in PostureKind::ALL {
-                item!(sub, p.label(), Command::SetPosture(p), st.posture == p);
-            }
-        }
-        let many = st.monitors.len() > 1;
-        if let Some(sub) = non_null(submenu!("Hang from this display")) {
-            for (index, label) in &st.monitors {
-                item!(sub, label, Command::SetMonitor(*index), *index == st.monitor, many);
-            }
-        }
-        sep!(menu);
-        item!(menu, "Hang longer", Command::HangUp, false);
-        item!(menu, "Hang shorter", Command::HangDown, false);
-        item!(menu, "Bigger", Command::Bigger, false);
-        item!(menu, "Smaller", Command::Smaller, false);
-        item!(menu, "Reset position", Command::ResetPosition, false);
-        sep!(menu);
-        item!(menu, "Settings...", Command::OpenSettings, false);
-        item!(
-            menu,
-            "Start with Windows",
-            Command::ToggleLaunchAtLogin,
-            st.launch_at_login
-        );
-        sep!(menu);
-        item!(menu, "About Hanglock", Command::About, false);
-        item!(menu, "Exit Hanglock", Command::Quit, false);
+        let mut plan = Plan::default();
+        plan.fill(menu, &st);
+        let chosen = self.track(menu, at, &plan);
+        unsafe { sys::DestroyMenu(menu) };
+        chosen
+    }
 
-        // A popup will not dismiss itself on click-away unless its owner window is foreground, and
-        // taking foreground away from the user's app is exactly what this overlay must never do. The
-        // documented sequence: claim foreground, track, then send a null message so the system
-        // releases the capture properly, then hand foreground back. The caret position in the other
-        // app is untouched throughout, because we never activate anything.
-        unsafe {
+    /// Display the popup at a screen point and wait for it.
+    ///
+    /// A popup will not dismiss itself on click-away unless its owner window is foreground, and taking
+    /// foreground away from the user's app is exactly what this overlay must never do. The documented
+    /// sequence: claim foreground, track, then send a null message so the system releases the capture
+    /// properly, then hand foreground back. The caret position in the other app is untouched throughout,
+    /// because we never activate anything.
+    fn track(&self, menu: sys::HMENU, at: (i32, i32), plan: &Plan) -> Option<Command> {
+        let chosen = unsafe {
             let prev = sys::GetForegroundWindow();
             sys::SetForegroundWindow(self.hwnd);
             let chosen = sys::TrackPopupMenuEx(
@@ -272,13 +169,143 @@ impl Tray {
             if !prev.is_null() && prev != self.hwnd {
                 sys::SetForegroundWindow(prev);
             }
-            sys::DestroyMenu(menu);
-            items
-                .iter()
-                .find(|(id, _)| *id == chosen as usize)
-                .map(|(_, c)| *c)
+            chosen
+        };
+        plan.command(chosen as usize)
+    }
+}
+
+/// A greyed line with no id behind it: it can be read and cannot be chosen, which is what a refusal
+/// deserves. `Plan::command` can never match it, since real ids start above `ID_BASE`.
+fn note(menu: sys::HMENU, label: &str) {
+    let text = sys::wide(label);
+    unsafe {
+        sys::AppendMenuW(menu, sys::MF_STRING | sys::MF_GRAYED, 0, text.as_ptr());
+    }
+}
+
+fn sep(menu: sys::HMENU) {
+    unsafe {
+        sys::AppendMenuW(menu, sys::MF_SEPARATOR, 0, std::ptr::null());
+    }
+}
+
+/// A submenu, or a null handle the caller skips. The parent owns it once appended — destroying the menu
+/// destroys its submenus with it, which is why nothing frees `sub` separately. A `CreatePopupMenu` that
+/// failed is a null handle, and the parent simply does not get that branch: a menu with one missing
+/// submenu is a worse outcome than a menu with one fewer choice, and neither is worth failing over.
+fn submenu(menu: sys::HMENU, title: &str) -> sys::HMENU {
+    let sub = unsafe { sys::CreatePopupMenu() };
+    if !sub.is_null() {
+        let text = sys::wide(title);
+        unsafe {
+            sys::AppendMenuW(menu, sys::MF_POPUP, sub as usize, text.as_ptr());
         }
     }
+    sub
+}
+
+/// The id counter and the id-to-command table of one popup.
+///
+/// A menu item has to carry a value with it, and `TrackPopupMenuEx` answers with only the id — so the
+/// table is the menu's meaning, and it is built at the same moment as the menu. Keeping the two in one
+/// object is what stops an id being handed out twice or a label and a command disagreeing: there is one
+/// method that does both, and no way to call only half of it.
+#[derive(Default)]
+struct Plan {
+    next: usize,
+    items: Vec<(usize, Command)>,
+}
+
+impl Plan {
+    /// One pickable row. `checked` is the tick, `on` whether it can be chosen at all — a row the user
+    /// is not allowed to pick is still worth showing them, which is the difference between a greyed
+    /// item and an absent one.
+    fn item(
+        &mut self,
+        menu: sys::HMENU,
+        label: &str,
+        cmd: Command,
+        checked: bool,
+        on: bool,
+    ) {
+        self.next += 1;
+        let id = ID_BASE + self.next;
+        let mut flags = sys::MF_STRING;
+        if checked {
+            flags |= sys::MF_CHECKED;
+        }
+        if !on {
+            flags |= sys::MF_GRAYED;
+        }
+        let text = sys::wide(label);
+        unsafe {
+            sys::AppendMenuW(menu, flags, id, text.as_ptr());
+        }
+        self.items.push((id, cmd));
+    }
+
+    fn command(&self, id: usize) -> Option<Command> {
+        self.items
+            .iter()
+            .find(|(got, _)| *got == id)
+            .map(|(_, cmd)| *cmd)
+    }
+
+    /// The menu itself, in the order a person reads it: the two decisions the clock cannot show you,
+    /// the two you change for an evening, the way out of a corner, then the window.
+    fn fill(&mut self, menu: sys::HMENU, st: &MenuState) {
+        if let Some(what) = st.notice {
+            note(menu, what);
+            sep(menu);
+        }
+        self.item(menu, "Show clock", Command::ToggleVisible, st.visible, true);
+        sep(menu);
+        self.item(menu, "Always on top", Command::ToggleTopmost, st.topmost, true);
+        let mouse = format!("Mouse: {}", st.click_through.label());
+        let sub = submenu(menu, &mouse);
+        if !sub.is_null() {
+            for c in ClickThrough::ALL {
+                self.item(sub, c.label(), Command::SetClickThrough(c), st.click_through == c, true);
+            }
+        }
+        self.item(menu, "Show seconds", Command::ToggleSeconds, st.seconds, true);
+        self.item(menu, "12-hour time", Command::Toggle12Hour, st.hour12, true);
+        self.item(menu, "AM / PM", Command::ToggleMeridiem, st.meridiem, st.hour12);
+        let swing = format!("How it swings: {}", st.posture.label());
+        let sub = submenu(menu, &swing);
+        if !sub.is_null() {
+            for p in PostureKind::ALL {
+                self.item(sub, p.label(), Command::SetPosture(p), st.posture == p, true);
+            }
+        }
+        let many = st.monitors.len() > 1;
+        let sub = submenu(menu, "Hang from this display");
+        if !sub.is_null() {
+            for (index, label) in &st.monitors {
+                self.item(sub, label, Command::SetMonitor(*index), *index == st.monitor, many);
+            }
+        }
+        sep(menu);
+        self.item(menu, "Hang longer", Command::HangUp, false, true);
+        self.item(menu, "Hang shorter", Command::HangDown, false, true);
+        self.item(menu, "Bigger", Command::Bigger, false, true);
+        self.item(menu, "Smaller", Command::Smaller, false, true);
+        self.item(menu, "Reset position", Command::ResetPosition, false, true);
+        sep(menu);
+        self.item(menu, "Settings...", Command::OpenSettings, false, true);
+        self.item(
+            menu,
+            "Start with Windows",
+            Command::ToggleLaunchAtLogin,
+            st.launch_at_login,
+            true,
+        );
+        sep(menu);
+        self.item(menu, "About Hanglock", Command::About, false, true);
+        self.item(menu, "Exit Hanglock", Command::Quit, false, true);
+    }
+
 }
 
 impl Drop for Tray {

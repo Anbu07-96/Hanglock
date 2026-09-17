@@ -157,7 +157,10 @@ fn every_row_reads_the_document_it_was_handed() {
 fn the_cord_row_stops_at_the_ends_of_its_ladder() {
     let mut s = docs();
     s.overlay.hang = panel::HANG_STEPS[0];
-    let Control::Nudge { can_down, can_up, .. } = control(&s, RowId::HangLength) else {
+    let Control::Nudge {
+        can_down, can_up, ..
+    } = control(&s, RowId::HangLength)
+    else {
         panic!("the cord row is a nudge");
     };
     assert!(!can_down, "the shortest cord has nothing shorter");
@@ -174,15 +177,26 @@ fn the_cord_row_stops_at_the_ends_of_its_ladder() {
     assert!(can_down);
     assert!(!can_up, "and nothing longer");
     let n = panel::HANG_STEPS.len();
-    assert!(text.contains(&format!("{n} of {n}")), "{text} should say which rung it is");
+    assert!(
+        text.contains(&format!("{n} of {n}")),
+        "{text} should say which rung it is"
+    );
     // A hand-typed length lands between two rungs, and the readout says which pair the buttons move
     // between rather than inventing a value the ladder does not have.
     s.overlay.hang = 170.0;
     assert_eq!(panel::hang_index(170.0), 2);
     s.overlay.hang = 150.0;
-    assert_eq!(panel::hang_index(150.0), 2, "exactly on a rung reads as that rung");
+    assert_eq!(
+        panel::hang_index(150.0),
+        2,
+        "exactly on a rung reads as that rung"
+    );
     s.overlay.hang = 151.0;
-    assert_eq!(panel::hang_index(151.0), 3, "and just above it reads as the next");
+    assert_eq!(
+        panel::hang_index(151.0),
+        3,
+        "and just above it reads as the next"
+    );
 }
 
 #[test]
@@ -191,7 +205,10 @@ fn a_click_on_each_row_asks_for_the_tray_s_own_command() {
     let ask = |id: RowId, step: Step| {
         panel::change(&s, id, step).unwrap_or_else(|| panic!("{id:?} + {step:?} did nothing"))
     };
-    assert_eq!(ask(RowId::LaunchAtLogin, Step::Toggle), Command::ToggleLaunchAtLogin);
+    assert_eq!(
+        ask(RowId::LaunchAtLogin, Step::Toggle),
+        Command::ToggleLaunchAtLogin
+    );
     assert_eq!(ask(RowId::Topmost, Step::Toggle), Command::ToggleTopmost);
     assert_eq!(ask(RowId::Hour12, Step::Toggle), Command::Toggle12Hour);
     assert_eq!(ask(RowId::Seconds, Step::Toggle), Command::ToggleSeconds);
@@ -200,7 +217,10 @@ fn a_click_on_each_row_asks_for_the_tray_s_own_command() {
     assert_eq!(ask(RowId::ClockSize, Step::Down), Command::Smaller);
     assert_eq!(ask(RowId::HangLength, Step::Up), Command::HangUp);
     assert_eq!(ask(RowId::HangLength, Step::Down), Command::HangDown);
-    assert_eq!(ask(RowId::ResetPosition, Step::Press), Command::ResetPosition);
+    assert_eq!(
+        ask(RowId::ResetPosition, Step::Press),
+        Command::ResetPosition
+    );
     assert_eq!(ask(RowId::Monitor, Step::Pick(1)), Command::SetMonitor(1));
     assert_eq!(
         ask(RowId::Posture, Step::Pick(0)),
@@ -267,7 +287,11 @@ fn the_display_list_says_which_one_the_clock_is_on_and_nothing_else() {
     assert_eq!(options.len(), 2);
     assert_eq!(selected, 1);
     assert!(options[1].contains("2560 x 1440"), "{}", options[1]);
-    assert!(options[1].contains("150%"), "DPI belongs in the label: {}", options[1]);
+    assert!(
+        options[1].contains("150%"),
+        "DPI belongs in the label: {}",
+        options[1]
+    );
     assert!(options[1].contains("<- here"), "{}", options[1]);
     assert!(!options[0].contains("here"), "{}", options[0]);
 }

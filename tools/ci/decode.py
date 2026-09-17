@@ -54,18 +54,28 @@ def gh(*args: str) -> str:
 
 
 def annotations_for(run_id: str) -> list[dict]:
-    """Every annotation of every check-run of a workflow run, with the job kept in the title."""
-    jobs = json.loads(gh(f"repos/{REPO}/actions/runs/{run_id}/jobs")).get("jobs", [])
+    """Every annotation of every check-run of a workflow run.
+
+    Two APIs describe the same work — Actions *jobs* and Checks *check-runs* — and the mapping between
+    them (`actions/jobs/<id>/checks`) 404s for a workflow run on this repo, so the run's head commit is
+    used instead: `commits/<sha>/check-runs` lists the checks, and each carries `annotations_count`, which
+    is what says whether anything was published at all. Duplicated check-runs (the same name for the
+    `push` and `pull_request` events on one SHA) are deduplicated by id: the annotations are the same
+    bytes, and re-printing a 60 KB log twice helps nobody.
+    """
+    sha = json.loads(gh(f"repos/{REPO}/actions/runs/{run_id}"))["head_sha"]
+    checks = json.loads(gh(f"repos/{REPO}/commits/{sha}/check-runs?per_page=50")).get("check_runs", [])
     out: list[dict] = []
-    for job in jobs:
-        for check in json.loads(gh(f"repos/{REPO}/actions/jobs/{job['id']}/checks")):
-            url = check.get("output", {}).get("annotations_url") or (
-                f"repos/{REPO}/check-runs/{check['id']}/annotations"
-            )
-            for ann in json.loads(gh(url)):
-                ann = dict(ann)
-                ann.setdefault("title", f"{job.get('name')} :: {check.get('name')}")
-                out.append(ann)
+    seen: set[int] = set()
+    for check in checks:
+        if not check.get("output", {}).get("annotations_count") or check["id"] in seen:
+            continue
+        seen.add(check["id"])
+        url = check["output"].get("annotations_url") or f"repos/{REPO}/check-runs/{check['id']}/annotations"
+        for ann in json.loads(gh(url)):
+            ann = dict(ann)
+            ann.setdefault("title", check.get("name", ""))
+            out.append(ann)
     return out
 
 

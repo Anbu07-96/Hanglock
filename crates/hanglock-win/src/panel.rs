@@ -65,8 +65,7 @@ pub type AnswerFn = unsafe fn(*mut core::ffi::c_void, RowId, panel::Step);
 
 /// Open a panel window for `state`. Set by `run`, which knows `A`, so that `Host::show_settings` does
 /// not have to.
-pub type OpenFn =
-    unsafe fn(*mut core::ffi::c_void, sys::HMODULE, Vec<Group>) -> sys::HWND;
+pub type OpenFn = unsafe fn(*mut core::ffi::c_void, sys::HMODULE, Vec<Group>) -> sys::HWND;
 
 /// Which piece of a row this is. A row is one *setting* and up to four controls, and the difference
 /// matters: only the buttons take the tab, and only the value and the label are `STATIC`.
@@ -156,9 +155,7 @@ fn text_of(row: &Row, part: Part, which: usize) -> String {
         // label, which is why the same words come back from three parts and one expression.
         Part::Label | Part::Check | Part::Push => row.label.to_string(),
         Part::Radio => match &row.control {
-            Control::Choice { options, .. } => {
-                options.get(which).cloned().unwrap_or_default()
-            }
+            Control::Choice { options, .. } => options.get(which).cloned().unwrap_or_default(),
             _ => String::new(),
         },
         Part::Value => match &row.control {
@@ -201,14 +198,7 @@ fn scale_of(hwnd: sys::HWND) -> f64 {
 }
 
 /// Where one control goes, in device px, given the row's top edge.
-fn box_of(
-    row: &Row,
-    part: Part,
-    which: usize,
-    y: f64,
-    w: f64,
-    s: f64,
-) -> (i32, i32, i32, i32) {
+fn box_of(row: &Row, part: Part, which: usize, y: f64, w: f64, s: f64) -> (i32, i32, i32, i32) {
     let right = w - MARGIN * s;
     let line = y;
     let radio_line = y + (ROW_H + RADIO_H * which as f64) * s;
@@ -235,12 +225,7 @@ fn box_of(
             line,
             line + ROW_H * s,
         ),
-        Part::More => (
-            right - BUTTON_W * s,
-            right,
-            line,
-            line + ROW_H * s,
-        ),
+        Part::More => (right - BUTTON_W * s, right, line, line + ROW_H * s),
         Part::Check | Part::Push => (MARGIN * s, right, line, line + ROW_H * s),
     };
     (
@@ -304,8 +289,12 @@ unsafe fn make_child(
 }
 
 /// Restate every control from `panel.groups`: create what is missing, then set text, tick, enable and
-/// frame. This is the whole of the window's state handling, and it is idempotent, which is why
-/// opening, refreshing after a command and reacting to a DPI change are the same call.
+/// frame. This is the whole of the window's state handling, and it is idempotent, which is why opening,
+/// refreshing after a command and reacting to a DPI change are the same call.
+///
+/// The work is in [`sync_row`] and [`size_to_content`]; what is left here is the walk that gives them
+/// coordinates, so the two questions — what does each control say, and how big is the window — are
+/// answered one at a time.
 unsafe fn repaint(hwnd: sys::HWND, panel: &mut Panel) {
     let s = scale_of(hwnd);
     let w = WIDTH * s;
@@ -334,38 +323,7 @@ unsafe fn repaint(hwnd: sys::HWND, panel: &mut Panel) {
         }
         y += (CAP_H + 2.0) * s;
         for row in &group.rows {
-            let want = parts(row);
-            if panel.children.len() <= ri {
-                panel.children.push(Vec::new());
-            }
-            while panel.children[ri].len() < want.len() {
-                let k = panel.children[ri].len();
-                let (part, which) = want[k];
-                let id = ID_BASE + ri * PARTS_PER_ROW + k;
-                let child = unsafe { make_child(hwnd, panel, row, part, which, k == 0, id, s) };
-                panel.children[ri].push(child);
-            }
-            for (k, (part, which)) in want.iter().enumerate() {
-                let Some(child) = panel.children[ri].get(k).copied() else {
-                    continue;
-                };
-                let (x, ty, cw, ch) = box_of(row, *part, *which, y, w, s);
-                let text = sys::wide(&text_of(row, *part, *which));
-                unsafe {
-                    sys::SetWindowTextW(child, text.as_ptr());
-                    sys::MoveWindow(child, x, ty, cw, ch, 1);
-                    sys::EnableWindow(child, i32::from(enabled_of(row, *part)));
-                    if matches!(*part, Part::Check | Part::Radio) {
-                        let on = checked_of(row, *part, *which);
-                        sys::SendMessageW(
-                            child,
-                            sys::BM_SETCHECK,
-                            if on { sys::BST_CHECKED } else { sys::BST_UNCHECKED },
-                            0,
-                        );
-                    }
-                }
-            }
+            sync_row(hwnd, panel, row, ri, y, w, s);
             y += (row_height(row) + ROW_GAP) * s;
             ri += 1;
         }
@@ -388,10 +346,68 @@ unsafe fn repaint(hwnd: sys::HWND, panel: &mut Panel) {
         );
     }
     y += close_h + MARGIN * s;
-    // The rows decide the *client* size; the frame around it belongs to the window manager, and its
-    // width is neither constant nor small once a caption, a border and a per-monitor-DPI scale are all
-    // in the same sum. So the client rect goes in and the window rect comes out, rather than this file
-    // guessing at a border width the way a hand-written dialog template would have to.
+    unsafe { size_to_content(hwnd, w, y) };
+}
+
+/// One row's controls: create what is missing, then restate text, place, enable state and tick.
+///
+/// A row that already has all its parts is only *restated* — that is what makes a command, a DPI
+/// change and a first paint the same operation, and why there is no "update" path separate from an
+/// "initialise" one to get out of sync with the other.
+unsafe fn sync_row(
+    hwnd: sys::HWND,
+    panel: &mut Panel,
+    row: &Row,
+    ri: usize,
+    y: f64,
+    w: f64,
+    s: f64,
+) {
+    let want = parts(row);
+    if panel.children.len() <= ri {
+        panel.children.push(Vec::new());
+    }
+    while panel.children[ri].len() < want.len() {
+        let k = panel.children[ri].len();
+        let (part, which) = want[k];
+        let id = ID_BASE + ri * PARTS_PER_ROW + k;
+        let child = unsafe { make_child(hwnd, panel, row, part, which, k == 0, id, s) };
+        panel.children[ri].push(child);
+    }
+    for (k, (part, which)) in want.iter().enumerate() {
+        let Some(child) = panel.children[ri].get(k).copied() else {
+            continue;
+        };
+        let (x, ty, cw, ch) = box_of(row, *part, *which, y, w, s);
+        let text = sys::wide(&text_of(row, *part, *which));
+        unsafe {
+            sys::SetWindowTextW(child, text.as_ptr());
+            sys::MoveWindow(child, x, ty, cw, ch, 1);
+            sys::EnableWindow(child, i32::from(enabled_of(row, *part)));
+            if matches!(*part, Part::Check | Part::Radio) {
+                let on = checked_of(row, *part, *which);
+                sys::SendMessageW(
+                    child,
+                    sys::BM_SETCHECK,
+                    if on {
+                        sys::BST_CHECKED
+                    } else {
+                        sys::BST_UNCHECKED
+                    },
+                    0,
+                );
+            }
+        }
+    }
+}
+
+/// Give the window the rect its content needs.
+///
+/// The rows decide the *client* size; the frame around it belongs to the window manager, and its width
+/// is neither constant nor small once a caption, a border and a per-monitor-DPI scale are all in the
+/// same sum. So the client rect goes in and the window rect comes out, rather than this file guessing
+/// at a border width the way a hand-written dialog template would have to.
+unsafe fn size_to_content(hwnd: sys::HWND, w: f64, y: f64) {
     let style = unsafe { sys::GetWindowLongPtrW(hwnd, sys::GWL_STYLE) } as sys::DWORD;
     let mut want = sys::WINRECT {
         left: 0,
@@ -507,8 +523,7 @@ pub unsafe fn open(
             lpsz_class_name: name.as_ptr(),
             ..unsafe { std::mem::zeroed() }
         };
-        if sys::RegisterClassExW(&wc) == 0
-            && sys::GetLastError() != sys::ERROR_CLASS_ALREADY_EXISTS
+        if sys::RegisterClassExW(&wc) == 0 && sys::GetLastError() != sys::ERROR_CLASS_ALREADY_EXISTS
         {
             return std::ptr::null_mut();
         }
@@ -820,7 +835,10 @@ mod tests {
             !enabled_of(size, Part::More),
             "bigger is offered at the top of the range"
         );
-        assert!(enabled_of(size, Part::Less), "smaller is refused at the top");
+        assert!(
+            enabled_of(size, Part::Less),
+            "smaller is refused at the top"
+        );
     }
 
     #[test]

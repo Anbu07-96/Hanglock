@@ -158,7 +158,9 @@ impl std::fmt::Display for Outcome {
             // path of `%APPDATA%` carries the account name, and this line is quoted in bug reports.
             Self::Recovered { kept, note } => {
                 let name = kept.file_name().unwrap_or_default().to_string_lossy();
-                f.write_str(&format!("defaults; the previous file {note} (kept as {name})"))
+                f.write_str(&format!(
+                    "defaults; the previous file {note} (kept as {name})"
+                ))
             }
         }
     }
@@ -269,8 +271,8 @@ mod tests {
 
     impl Tmp {
         fn new(name: &str) -> Self {
-            let root = std::env::temp_dir()
-                .join(format!("hanglock-store-{}-{name}", std::process::id()));
+            let root =
+                std::env::temp_dir().join(format!("hanglock-store-{}-{name}", std::process::id()));
             let _ = std::fs::remove_dir_all(&root);
             std::fs::create_dir_all(&root).expect("temp dir");
             Self(root)
@@ -336,7 +338,10 @@ mod tests {
             panic!("a foreign file must be quarantined, got {outcome:?}");
         };
         assert!(note.contains("no Hanglock keys"));
-        assert!(!t.0.join(FILE).exists(), "the original must not be left in place");
+        assert!(
+            !t.0.join(FILE).exists(),
+            "the original must not be left in place"
+        );
         assert!(kept.exists(), "and it must still exist somewhere");
         assert_eq!(
             std::fs::read_to_string(&kept).expect("read backup"),
@@ -354,7 +359,10 @@ mod tests {
         assert_eq!(outcome, Outcome::Loaded, "not a corruption event");
         assert_eq!(s.overlay.hang, 230.0);
         assert_eq!(s.overlay.scale, 1.15);
-        assert!(s.face.hour12, "`no` is not a boolean, so the default stands");
+        assert!(
+            s.face.hour12,
+            "`no` is not a boolean, so the default stands"
+        );
         assert_eq!(
             s.general.fps_cap, 60,
             "the missing section took its default, not a reset"

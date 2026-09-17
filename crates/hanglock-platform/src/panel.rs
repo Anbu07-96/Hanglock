@@ -92,141 +92,149 @@ pub struct Group {
 /// The cord lengths the tray and the window step through, short to long — one table so the two
 /// surfaces cannot disagree about what "hang longer" means. The ends are the settings file's own
 /// limits, which is what makes the last step a real stop rather than a silent clamp.
-pub const HANG_STEPS: [f64; 6] = [
-    limits::HANG.0,
-    110.0,
-    150.0,
-    190.0,
-    230.0,
-    limits::HANG.1,
-];
+pub const HANG_STEPS: [f64; 6] = [limits::HANG.0, 110.0, 150.0, 190.0, 230.0, limits::HANG.1];
 
 /// One step of one nudge row, in that row's units.
 const RATIO_STEP: f64 = 0.05;
 const DROP_STEP: f64 = 10.0;
 
 /// The window's contents, derived from the document and from the displays that exist right now.
+///
+/// Three groups, three builders, and the grouping is the *point* rather than a layout detail:
+/// "General" is what the app does to the machine, "Clock" is what the digits say, "Behaviour" is
+/// how the window and the mouse react. A row belongs to exactly one of them, and a row that appears
+/// in two would be two settings with one name.
 #[must_use]
 pub fn form(s: &Settings, monitors: &[Monitor]) -> Vec<Group> {
+    vec![
+        general_group(s, monitors),
+        clock_group(s),
+        behaviour_group(s),
+    ]
+}
+
+/// What the app does to the machine, and where on the machine it hangs.
+fn general_group(s: &Settings, monitors: &[Monitor]) -> Group {
+    let o = &s.overlay;
+    Group {
+        title: "General",
+        rows: vec![
+            Row {
+                id: RowId::LaunchAtLogin,
+                label: "Start with Windows",
+                control: Control::Check {
+                    on: s.general.launch_at_login,
+                },
+            },
+            Row {
+                id: RowId::Topmost,
+                label: "Keep it above other windows",
+                control: Control::Check { on: o.topmost },
+            },
+            Row {
+                id: RowId::Monitor,
+                label: "Hang it from this display",
+                control: Control::Choice {
+                    options: monitor_options(monitors, o.monitor_index),
+                    selected: index_of_monitor(monitors, o.monitor_index),
+                },
+            },
+        ],
+    }
+}
+
+/// The digits, and how big a plate they sit on.
+fn clock_group(s: &Settings) -> Group {
     let o = &s.overlay;
     let f = &s.face;
-    let drops = drops_text(o.anchor_drop);
-    let cord = cord_text(o.hang);
-    let mouse = mouse_options();
-    let mouse_at = index_of_click(o.click_through);
-    let swing = posture_options();
-    let swing_at = index_of_posture(f.posture);
-    let screens = monitor_options(monitors, o.monitor_index);
-    let screen_at = index_of_monitor(monitors, o.monitor_index);
-    vec![
-        Group {
-            title: "General",
-            rows: vec![
-                Row {
-                    id: RowId::LaunchAtLogin,
-                    label: "Start with Windows",
-                    control: Control::Check {
-                        on: s.general.launch_at_login,
-                    },
+    Group {
+        title: "Clock",
+        rows: vec![
+            Row {
+                id: RowId::Hour12,
+                label: "12-hour clock",
+                control: Control::Check { on: f.hour12 },
+            },
+            Row {
+                id: RowId::Seconds,
+                label: "Show seconds",
+                control: Control::Check { on: f.seconds },
+            },
+            Row {
+                id: RowId::Meridiem,
+                label: "Show AM / PM",
+                control: Control::Check { on: f.meridiem },
+            },
+            Row {
+                id: RowId::ClockSize,
+                label: "Size",
+                control: Control::Nudge {
+                    text: percent(o.scale),
+                    can_down: o.scale > limits::SCALE.0 + 0.001,
+                    can_up: o.scale < limits::SCALE.1 - 0.001,
                 },
-                Row {
-                    id: RowId::Topmost,
-                    label: "Keep it above other windows",
-                    control: Control::Check { on: o.topmost },
+            },
+            Row {
+                id: RowId::HangLength,
+                label: "Cord",
+                control: Control::Nudge {
+                    text: cord_text(o.hang),
+                    can_down: hang_index(o.hang) > 0,
+                    can_up: hang_below_top(o.hang),
                 },
-                Row {
-                    id: RowId::Monitor,
-                    label: "Hang it from this display",
-                    control: Control::Choice {
-                        options: screens,
-                        selected: screen_at,
-                    },
+            },
+        ],
+    }
+}
+
+/// The mouse, the swing, and where the clock is allowed to be.
+fn behaviour_group(s: &Settings) -> Group {
+    let o = &s.overlay;
+    let f = &s.face;
+    Group {
+        title: "Behaviour",
+        rows: vec![
+            Row {
+                id: RowId::ClickThrough,
+                label: "Mouse",
+                control: Control::Choice {
+                    options: mouse_options(),
+                    selected: index_of_click(o.click_through),
                 },
-            ],
-        },
-        Group {
-            title: "Clock",
-            rows: vec![
-                Row {
-                    id: RowId::Hour12,
-                    label: "12-hour clock",
-                    control: Control::Check { on: f.hour12 },
+            },
+            Row {
+                id: RowId::Posture,
+                label: "How it swings",
+                control: Control::Choice {
+                    options: posture_options(),
+                    selected: index_of_posture(f.posture),
                 },
-                Row {
-                    id: RowId::Seconds,
-                    label: "Show seconds",
-                    control: Control::Check { on: f.seconds },
+            },
+            Row {
+                id: RowId::AnchorAcross,
+                label: "Across the display",
+                control: Control::Nudge {
+                    text: percent(o.anchor_ratio),
+                    can_down: o.anchor_ratio > limits::ANCHOR_RATIO.0 + 0.001,
+                    can_up: o.anchor_ratio < limits::ANCHOR_RATIO.1 - 0.001,
                 },
-                Row {
-                    id: RowId::Meridiem,
-                    label: "Show AM / PM",
-                    control: Control::Check { on: f.meridiem },
+            },
+            Row {
+                id: RowId::AnchorDrop,
+                label: "Below the top edge",
+                control: Control::Nudge {
+                    text: drops_text(o.anchor_drop),
+                    can_down: o.anchor_drop > limits::ANCHOR_DROP.0 + 0.001,
+                    can_up: o.anchor_drop < limits::ANCHOR_DROP.1 - 0.001,
                 },
-                Row {
-                    id: RowId::ClockSize,
-                    label: "Size",
-                    control: Control::Nudge {
-                        text: percent(o.scale),
-                        can_down: o.scale > limits::SCALE.0 + 0.001,
-                        can_up: o.scale < limits::SCALE.1 - 0.001,
-                    },
-                },
-                Row {
-                    id: RowId::HangLength,
-                    label: "Cord",
-                    control: Control::Nudge {
-                        text: cord,
-                        can_down: hang_index(o.hang) > 0,
-                        can_up: hang_below_top(o.hang),
-                    },
-                },
-            ],
-        },
-        Group {
-            title: "Behaviour",
-            rows: vec![
-                Row {
-                    id: RowId::ClickThrough,
-                    label: "Mouse",
-                    control: Control::Choice {
-                        options: mouse,
-                        selected: mouse_at,
-                    },
-                },
-                Row {
-                    id: RowId::Posture,
-                    label: "How it swings",
-                    control: Control::Choice {
-                        options: swing,
-                        selected: swing_at,
-                    },
-                },
-                Row {
-                    id: RowId::AnchorAcross,
-                    label: "Across the display",
-                    control: Control::Nudge {
-                        text: percent(o.anchor_ratio),
-                        can_down: o.anchor_ratio > limits::ANCHOR_RATIO.0 + 0.001,
-                        can_up: o.anchor_ratio < limits::ANCHOR_RATIO.1 - 0.001,
-                    },
-                },
-                Row {
-                    id: RowId::AnchorDrop,
-                    label: "Below the top edge",
-                    control: Control::Nudge {
-                        text: drops,
-                        can_down: o.anchor_drop > limits::ANCHOR_DROP.0 + 0.001,
-                        can_up: o.anchor_drop < limits::ANCHOR_DROP.1 - 0.001,
-                    },
-                },
-                Row {
-                    id: RowId::ResetPosition,
-                    label: "Put the clock back at the top centre",
-                    control: Control::Push,
-                },
-            ],
-        },
-    ]
+            },
+            Row {
+                id: RowId::ResetPosition,
+                label: "Put the clock back at the top centre",
+                control: Control::Push,
+            },
+        ],
+    }
 }
 
 /// Where `hang` sits in [`HANG_STEPS`].
@@ -336,17 +344,19 @@ pub fn change(s: &Settings, id: RowId, step: Step) -> Option<Command> {
         (RowId::Posture, Step::Pick(n)) => {
             PostureKind::ALL.get(n).copied().map(Command::SetPosture)
         }
-        (RowId::ClickThrough, Step::Pick(n)) => {
-            ClickThrough::ALL.get(n).copied().map(Command::SetClickThrough)
-        }
+        (RowId::ClickThrough, Step::Pick(n)) => ClickThrough::ALL
+            .get(n)
+            .copied()
+            .map(Command::SetClickThrough),
         (RowId::ClockSize, Step::Down) => Some(Command::Smaller),
         (RowId::ClockSize, Step::Up) => Some(Command::Bigger),
         (RowId::HangLength, Step::Down) => Some(Command::HangDown),
         (RowId::HangLength, Step::Up) => Some(Command::HangUp),
-        (RowId::AnchorAcross, Step::Down) => anchor_change(s, id, false),
-        (RowId::AnchorAcross, Step::Up) => anchor_change(s, id, true),
-        (RowId::AnchorDrop, Step::Down) => anchor_change(s, id, false),
-        (RowId::AnchorDrop, Step::Up) => anchor_change(s, id, true),
+        // Both anchor rows answer with the whole pair, and the direction is all that differs between
+        // them — which is why the four cases are two: `anchor_change` reads `id` for the row, so a
+        // merged arm cannot answer for the wrong setting.
+        (RowId::AnchorAcross | RowId::AnchorDrop, Step::Down) => anchor_change(s, id, false),
+        (RowId::AnchorAcross | RowId::AnchorDrop, Step::Up) => anchor_change(s, id, true),
         (RowId::ResetPosition, Step::Press) => Some(Command::ResetPosition),
         _ => None,
     }

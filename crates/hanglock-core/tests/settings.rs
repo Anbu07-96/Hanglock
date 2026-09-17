@@ -173,7 +173,8 @@ fn the_anchor_pair_round_trips_through_the_document() {
 /// existed loads, takes 0.0 for it, and keeps everything it did mention.
 #[test]
 fn a_document_from_before_the_drop_existed_still_loads() {
-    let old = "schema = 1\n\n[overlay]\nanchor_ratio = 0.8\nhang = 210\nclick_through = \"always\"\n";
+    let old =
+        "schema = 1\n\n[overlay]\nanchor_ratio = 0.8\nhang = 210\nclick_through = \"always\"\n";
     let (s, w) = Settings::from_toml(old);
     assert!(w.is_empty(), "{w:?}");
     assert_eq!(s.overlay.anchor_ratio, 0.8);
@@ -194,8 +195,7 @@ fn a_drop_outside_the_reach_is_clamped_to_it() {
     assert_eq!(far.overlay.anchor_drop, limits::ANCHOR_DROP.1);
     let (nan, _) = Settings::from_toml("[overlay]\nanchor_drop = nan\nanchor_ratio = nan\n");
     assert_eq!(
-        nan.overlay.anchor_drop,
-        0.0,
+        nan.overlay.anchor_drop, 0.0,
         "a NaN drop is repaired, not clamped into one"
     );
     assert_eq!(nan.overlay.anchor_ratio, 0.5, "and so is a NaN ratio");

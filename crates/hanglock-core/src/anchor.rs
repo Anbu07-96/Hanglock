@@ -95,7 +95,11 @@ pub fn dragged(
     let o = &s.overlay;
     let respect = o.respect_taskbar;
     let scale = m.scale.max(0.01);
-    let usable = if respect { m.work_logical() } else { m.bounds_logical() };
+    let usable = if respect {
+        m.work_logical()
+    } else {
+        m.bounds_logical()
+    };
     let bounds = m.bounds_logical();
     let want = Vec2::new(
         anchor_device.x + delta_device.x,

@@ -503,73 +503,133 @@ impl Model {
     pub fn on_command(&mut self, cmd: Command) -> Vec<Action> {
         use hanglock_core::settings::limits;
         let mut out = Vec::new();
+        let o = &mut self.settings.overlay;
+        let f = &mut self.settings.face;
         match cmd {
             Command::ToggleVisible => {
-                self.set_visible(!self.settings.overlay.enabled);
+                o.enabled = !o.enabled;
+                self.state = if o.enabled {
+                    State::Settled
+                } else {
+                    State::Hidden
+                };
                 out.push(Action::Save);
             }
             Command::ToggleTopmost => {
-                self.settings.overlay.topmost = !self.settings.overlay.topmost;
+                o.topmost = !o.topmost;
                 out.push(Action::Save);
             }
             Command::ToggleSeconds => {
-                self.settings.face.seconds = !self.settings.face.seconds;
+                f.seconds = !f.seconds;
                 out.push(Action::Save);
             }
             Command::Toggle12Hour => {
-                self.settings.face.hour12 = !self.settings.face.hour12;
-                out.push(Action::Save);
-            }
-            Command::ToggleMeridiem => {
-                self.settings.face.meridiem = !self.settings.face.meridiem;
+                f.hour12 = !f.hour12;
                 out.push(Action::Save);
             }
             Command::SetPosture(p) => {
                 self.notice = None;
-                self.settings.face.posture = p;
+                f.posture = p;
                 self.rope.att.posture = posture_of(&self.settings);
                 self.rope.wake();
                 out.push(Action::Save);
                 out.push(Action::PresentFull);
             }
             Command::HangUp | Command::HangDown => {
-                self.step_hang(if matches!(cmd, Command::HangUp) { 1 } else { -1 });
+                let dir = if matches!(cmd, Command::HangUp) {
+                    1
+                } else {
+                    -1
+                };
+                let cur = o.hang;
+                let next = HANG_STEPS
+                    .iter()
+                    .filter(|s| (dir > 0 && **s > cur + 0.01) || (dir < 0 && **s < cur - 0.01))
+                    .copied()
+                    .reduce(|a, b| if dir > 0 { a.min(b) } else { a.max(b) })
+                    .unwrap_or(cur);
+                o.hang = next.clamp(limits::HANG.0, limits::HANG.1);
                 out.push(Action::Relayout);
                 out.push(Action::Save);
             }
             Command::Bigger | Command::Smaller => {
-                let dir = if matches!(cmd, Command::Bigger) { 1.0 } else { -1.0 };
-                let next = (self.settings.overlay.scale + 0.15 * dir).clamp(
-                    limits::SCALE.0,
-                    limits::SCALE.1,
-                );
-                self.settings.overlay.scale = next;
+                let dir = if matches!(cmd, Command::Bigger) {
+                    1.0
+                } else {
+                    -1.0
+                };
+                o.scale = (o.scale + 0.15 * dir).clamp(limits::SCALE.0, limits::SCALE.1);
                 self.rope.card = self.settings.card();
                 out.push(Action::Relayout);
                 out.push(Action::Save);
             }
-            Command::ResetPosition => out.extend(self.reset_place()),
-            Command::SetClickThrough(mode) => out.extend(self.set_mouse(mode)),
-            Command::SetMonitor(index) => out.extend(self.set_monitor(index)),
+            Command::ResetPosition => {
+                // The recovery path, so it is written to put the clock back where a first run would
+                // have put it — and to *show* it, because "I hid it, and now I cannot find it" is the
+                // other way this app can strand a user. It does not change which display it is on: a
+                // clock moved to the monitor on the left is still on that monitor, and the user meant
+                // that.
+                o.anchor_ratio = Anchor::DEFAULT.ratio;
+                o.anchor_drop = Anchor::DEFAULT.drop;
+                o.hang = 150.0;
+                o.scale = 1.0;
+                if !o.enabled {
+                    o.enabled = true;
+                    self.state = State::Settled;
+                }
+                self.notice = None;
+                out.push(Action::Relayout);
+                out.push(Action::Save);
+            }
+            Command::SetClickThrough(mode) => {
+                if mode == ClickThrough::Always && !self.tray_ok {
+                    self.notice = Some(TRAY_REQUIRED);
+                } else {
+                    self.notice = None;
+                    if o.click_through != mode {
+                        o.click_through = mode;
+                        out.push(Action::Save);
+                    }
+                }
+            }
+            Command::SetMonitor(index) => {
+                if o.monitor_index != index {
+                    o.monitor_index = index;
+                    // Moving it to a display the user can see is the point of the row, so a clock that
+                    // was hidden comes back: a switch that appeared to do nothing reads as a failure.
+                    if !o.enabled {
+                        o.enabled = true;
+                        self.state = State::Settled;
+                    }
+                    out.push(Action::Relayout);
+                    out.push(Action::Save);
+                }
+            }
             Command::SetAnchor(want) => {
-                if want != Anchor::from_overlay(&self.settings.overlay) {
+                let cur = Anchor::from_overlay(o);
+                if cur != want {
                     self.set_anchor(want, true);
                     out.push(Action::Save);
                 }
             }
+            Command::ToggleMeridiem => {
+                f.meridiem = !f.meridiem;
+                out.push(Action::Save);
+            }
             Command::ToggleLaunchAtLogin => {
-                // The registry write is the platform's, and the answer is what the document keeps: a
-                // checkbox that ticks itself without the OS agreeing tells the user something false.
                 let on = !self.settings.general.launch_at_login;
                 self.settings.general.launch_at_login = on;
+                // The registry write is the platform's, and the answer is what the document keeps: a
+                // checkbox that ticks itself without the OS agreeing tells the user something false.
                 out.push(Action::ApplyAutostart(on));
                 out.push(Action::Save);
             }
             Command::OpenSettings => {
-                // Opening settings is a request to be seen; a hidden clock that answers with an
-                // invisible overlay is a wasted click.
-                if !self.settings.overlay.enabled {
-                    self.set_visible(true);
+                if self.state == State::Hidden {
+                    // Opening settings is a request to be seen; a hidden clock that answers with an
+                    // invisible overlay is a wasted click.
+                    o.enabled = true;
+                    self.state = State::Settled;
                     out.push(Action::Save);
                 }
                 out.push(Action::OpenSettings);
@@ -695,6 +755,7 @@ impl Model {
     pub fn preferred_rate(&self) -> u32 {
         self.settings.general.fps_cap
     }
+
 }
 
 impl Model {
@@ -710,62 +771,6 @@ impl Model {
             .reduce(|a, b| if dir > 0 { a.min(b) } else { a.max(b) })
             .unwrap_or(cur);
         self.settings.overlay.hang = next;
-    }
-
-    /// Showing and hiding is one decision with two consequences, and three commands need it: the
-    /// toggle, `Reset position`, and a switch of display that a user should be able to *see*.
-    fn set_visible(&mut self, on: bool) {
-        self.settings.overlay.enabled = on;
-        self.state = if on {
-            State::Settled
-        } else {
-            State::Hidden
-        };
-    }
-
-    /// The recovery path, written to put the clock back where a first run would have put it. It does
-    /// not change which display it is on: a clock moved to the monitor on the left is still on that
-    /// monitor, and the user meant that.
-    fn reset_place(&mut self) -> Vec<Action> {
-        let o = &mut self.settings.overlay;
-        o.anchor_ratio = Anchor::DEFAULT.ratio;
-        o.anchor_drop = Anchor::DEFAULT.drop;
-        o.hang = 150.0;
-        o.scale = 1.0;
-        let was_hidden = !o.enabled;
-        o.enabled = true;
-        if was_hidden {
-            self.state = State::Settled;
-        }
-        self.notice = None;
-        vec![Action::Relayout, Action::Save]
-    }
-
-    /// The mouse mode, with the one refusal the app is allowed to make on the user's behalf: a fully
-    /// click-through clock cannot be clicked to be put right, so it is not entered while the tray —
-    /// the way back — is not there.
-    fn set_mouse(&mut self, mode: ClickThrough) -> Vec<Action> {
-        if mode == ClickThrough::Always && !self.tray_ok {
-            self.notice = Some(TRAY_REQUIRED);
-            return Vec::new();
-        }
-        self.notice = None;
-        if self.settings.overlay.click_through == mode {
-            return Vec::new();
-        }
-        self.settings.overlay.click_through = mode;
-        vec![Action::Save]
-    }
-
-    /// Which display to hang from. A clock that was hidden comes back, because a switch that appeared
-    /// to do nothing reads as a failure rather than as a memory of an earlier choice.
-    fn set_monitor(&mut self, index: u32) -> Vec<Action> {
-        if self.settings.overlay.monitor_index == index {
-            return Vec::new();
-        }
-        self.settings.overlay.monitor_index = index;
-        self.set_visible(true);
-        vec![Action::Relayout, Action::Save]
     }
 }
 
@@ -919,11 +924,7 @@ pub fn diag(settings: &Settings, monitors: &[Monitor], found: &dyn std::fmt::Dis
         taskbar_auto_hidden: false,
         primary: true,
     };
-    let list = if synthetic {
-        vec![m0]
-    } else {
-        monitors.to_vec()
-    };
+    let list = if synthetic { vec![m0] } else { monitors.to_vec() };
     let primary = list
         .iter()
         .find(|x| x.primary)
@@ -935,10 +936,7 @@ pub fn diag(settings: &Settings, monitors: &[Monitor], found: &dyn std::fmt::Dis
     let o = &settings.overlay;
     let mut out = String::new();
     out.push_str(&format!("hanglock {}\n", env!("CARGO_PKG_VERSION")));
-    out.push_str(&format!(
-        "  settings file   {}\n",
-        crate::store::display_path()
-    ));
+    out.push_str(&format!("  settings file   {}\n", crate::store::display_path()));
     out.push_str(&format!("  as read         {found}\n"));
     out.push_str(&format!(
         "  displays        {}{}\n",
@@ -976,30 +974,13 @@ pub fn diag(settings: &Settings, monitors: &[Monitor], found: &dyn std::fmt::Dis
             format!(" (saved #{}, not connected: falling back)", o.monitor_index)
         }
     ));
-    out.push_str(&diag_where(&m, settings, &chosen, frame, p.clipped));
-    out.push_str(&diag_habits(&m, settings));
-    out.push_str(&diag_costs(&mut m, settings));
-    out
-}
-
-/// Where the clock ends up, in both coordinate systems and in the file's own units — three ways of
-/// naming one position, printed together because the disagreement between them is the bug report.
-fn diag_where(
-    m: &Model,
-    settings: &Settings,
-    chosen: &Monitor,
-    frame: Rect,
-    clipped: bool,
-) -> String {
-    let o = &settings.overlay;
-    let mut out = String::new();
     out.push_str(&format!(
         "  frame (device)  {:.0},{:.0} {:.0}x{:.0}  clipped={}\n",
         frame.x0,
         frame.y0,
         frame.w(),
         frame.h(),
-        clipped
+        p.clipped
     ));
     let a = m.anchor_device();
     out.push_str(&format!(
@@ -1014,18 +995,7 @@ fn diag_where(
         "  anchor (screen) {:.1},{:.1} device px\n",
         a.x, a.y
     ));
-    out
-}
-
-/// What the document says the clock should be, line by line, including the two claims that belong to
-/// the OS rather than to the file (always-on-top, autostart) and so are printed as *wanted*.
-fn diag_habits(m: &Model, settings: &Settings) -> String {
-    let o = &settings.overlay;
-    let mut out = String::new();
-    out.push_str(&format!(
-        "  clock           {}\n",
-        face_summary(settings, &m)
-    ));
+    out.push_str(&format!("  clock           {}\n", face_summary(settings, &m)));
     out.push_str(&format!(
         "  mouse           {} ({})\n",
         o.click_through.label(),
@@ -1034,19 +1004,11 @@ fn diag_habits(m: &Model, settings: &Settings) -> String {
     out.push_str(&format!(
         "  on top          {}{}\n",
         if o.topmost { "on" } else { "off" },
-        if o.topmost {
-            ""
-        } else {
-            " (the OS may cover it)"
-        }
+        if o.topmost { "" } else { " (the OS may cover it)" }
     ));
     out.push_str(&format!(
         "  visible         {}\n",
-        if o.enabled {
-            "yes"
-        } else {
-            "no - the tray is the way back"
-        }
+        if o.enabled { "yes" } else { "no - the tray is the way back" }
     ));
     out.push_str(&format!(
         "  autostart       {}\n",
@@ -1074,14 +1036,7 @@ fn diag_habits(m: &Model, settings: &Settings) -> String {
         "  state           {:?}, sleeping={}\n",
         m.state, m.rope.sleeping
     ));
-    out
-}
-
-/// The frame the settings actually produce, and what drawing it costs. `diag` paints once, here, so the
-/// canvas numbers describe the clock the settings describe rather than an empty rig.
-fn diag_costs(m: &mut Model, settings: &Settings) -> String {
     m.paint();
-    let mut out = String::new();
     out.push_str(&format!(
         "  canvas          {}x{}, present_rect {}\n",
         m.canvas.size().0,
@@ -1418,7 +1373,10 @@ mod tests {
         let mut m = model();
         // The middle of the plate: the spot that *without* Alt is a grab-and-swing.
         let c = m.rope.card_centre();
-        m.on_input(Input::Press { at: c, alt: true });
+        m.on_input(Input::Press {
+            at: c,
+            alt: true,
+        });
         assert!(
             m.is_repositioning(),
             "Alt at the press must aim at the hang point wherever the pointer is"
@@ -1434,7 +1392,10 @@ mod tests {
         let mut m = model();
         let a = m.rope.anchor;
         let before = m.rope.card_centre();
-        m.on_input(Input::Press { at: a, alt: true });
+        m.on_input(Input::Press {
+            at: a,
+            alt: true,
+        });
         let acts = m.on_input(Input::Move {
             at: Vec2::new(a.x, a.y + 64.0),
             vel: Vec2::ZERO,
@@ -1473,7 +1434,10 @@ mod tests {
     fn a_dragged_position_survives_the_settings_round_trip() {
         let mut m = model();
         let a = m.rope.anchor;
-        m.on_input(Input::Press { at: a, alt: true });
+        m.on_input(Input::Press {
+            at: a,
+            alt: true,
+        });
         m.on_input(Input::Move {
             at: Vec2::new(a.x - 400.0, a.y + 90.0),
             vel: Vec2::ZERO,
@@ -1486,10 +1450,7 @@ mod tests {
         let saved = m.settings.to_toml();
         let (back, warnings) = Settings::from_toml(&saved);
         assert!(warnings.is_empty(), "round trip complained: {warnings:?}");
-        assert_eq!(
-            back, m.settings,
-            "the document did not survive its own writer"
-        );
+        assert_eq!(back, m.settings, "the document did not survive its own writer");
         let mut m2 = Model::new(back);
         let mon = m.monitor.expect("the first model had a monitor");
         let frame = m2.relayout(&[mon], 0);
@@ -1504,7 +1465,10 @@ mod tests {
     fn reset_position_clears_the_drop_and_brings_a_hidden_clock_back() {
         let mut m = model();
         let a = m.rope.anchor;
-        m.on_input(Input::Press { at: a, alt: true });
+        m.on_input(Input::Press {
+            at: a,
+            alt: true,
+        });
         m.on_input(Input::Move {
             at: Vec2::new(a.x + 20.0, a.y + 260.0),
             vel: Vec2::ZERO,
@@ -1535,19 +1499,13 @@ mod tests {
         // The default: the object answers, the box around it does not.
         assert_eq!(m.settings.overlay.click_through, ClickThrough::Hover);
         assert!(!regions(&m).whole_window);
-        assert!(
-            !regions(&m).contains(p),
-            "empty pixels must stay the desktop's"
-        );
+        assert!(!regions(&m).contains(p), "empty pixels must stay the desktop's");
         assert!(regions(&m).on_ring(m.rope.anchor));
         // Solid: the whole rectangle is a window again.
         m.on_command(Command::SetClickThrough(ClickThrough::Solid));
         assert!(regions(&m).whole_window);
         assert!(regions(&m).interactive);
-        assert!(
-            regions(&m).contains(p),
-            "a normal window takes its own corners"
-        );
+        assert!(regions(&m).contains(p), "a normal window takes its own corners");
         // Always: nothing does, and the tray is the only way out.
         m.on_command(Command::SetClickThrough(ClickThrough::Always));
         assert!(!regions(&m).interactive);
@@ -1682,11 +1640,7 @@ mod tests {
         assert!(m.tray_ok);
         // Agreeing costs nothing: no write, no save.
         let again = m.on_ready(true, true);
-        assert_eq!(
-            again,
-            vec![Action::Relayout],
-            "a quiet startup is a quiet startup"
-        );
+        assert_eq!(again, vec![Action::Relayout], "a quiet startup is a quiet startup");
     }
 
     #[test]

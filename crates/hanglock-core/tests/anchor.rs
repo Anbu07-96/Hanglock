@@ -83,7 +83,10 @@ fn a_drag_lands_exactly_where_the_cursor_went() {
             (at.y - from.y).abs() < 1e-6,
             "a horizontal drag moved the clock vertically: {at:?}"
         );
-        assert!(got.ratio > 0.0 && got.ratio < 1.0, "and the pair stayed in the file: {got:?}");
+        assert!(
+            got.ratio > 0.0 && got.ratio < 1.0,
+            "and the pair stayed in the file: {got:?}"
+        );
     }
 }
 
@@ -127,7 +130,11 @@ fn a_drag_down_stops_where_the_swing_would_leave_the_display() {
         (bottom - 1080.0).abs() < 1e-3,
         "the swing's bottom edge is at {bottom}, not at the display's"
     );
-    assert!(got.drop > 100.0, "and the drop is a real distance: {}", got.drop);
+    assert!(
+        got.drop > 100.0,
+        "and the drop is a real distance: {}",
+        got.drop
+    );
 }
 
 #[test]
@@ -166,8 +173,7 @@ fn the_same_drag_means_the_same_distance_at_any_scale() {
         let got = anchor::dragged(&m, &start, &c, from, delta);
         let at = placed(&m, &with(&start, got));
         assert!(
-            (at.x - (from.x + delta.x)).abs() < 0.2
-                && (at.y - (from.y + delta.y)).abs() < 1e-3,
+            (at.x - (from.x + delta.x)).abs() < 0.2 && (at.y - (from.y + delta.y)).abs() < 1e-3,
             "at {scale}x a drag of {delta:?} moved the clock to {at:?} from {from:?}"
         );
         // The drop is stored in logical px, so a bigger scale stores a smaller number for the same
@@ -188,7 +194,10 @@ fn a_pair_outside_the_document_is_pulled_back_rather_than_refused() {
     assert_eq!(out.ratio, 1.0, "the ratio has two ends and no more");
     assert_eq!(out.drop, 0.0, "and nothing above the hang line is recorded");
     let far = Anchor::clamped(0.5, 1e9);
-    assert_eq!(far.drop, 4096.0, "the reach the file documents is the reach the maths accepts");
+    assert_eq!(
+        far.drop, 4096.0,
+        "the reach the file documents is the reach the maths accepts"
+    );
 }
 
 /// The frame is clamped into the display before the anchor is, so near an edge the clock stops
