@@ -17,6 +17,14 @@ being the seven tests that only compile under `cfg(windows)`. Every number in th
 tree or off a CI run for the same reason; the sentence here that once claimed "10 doc tests" was neither, and
 `docs/reports/phase-2.md` §8 says so out loud instead of correcting itself quietly.
 
+**Phase 2.5B is the stage now.** The checklist was run on real hardware and the build failed it in the
+two ways a headless gate cannot see: the look, and what the mouse actually does on a desktop.
+[`reports/phase-2.5b-stage1.md`](reports/phase-2.5b-stage1.md) is the measured diagnosis (eight visual
+causes with their arithmetic, four code-located input defects) and the three composition concepts it
+proposes; the drawings are in `previews/phase-2.5/`, and every one of them comes from
+`tools/model/hanglock_concepts.py`, which renders through the shared painter without touching the
+solver's pinned constants — that file is the visual iteration loop this project did not have.
+
 CI's three jobs cover Linux, Windows `x64` and Windows `arm64`: fmt and clippy `-D warnings`, the suite
 including the golden trace, both generated artefacts against their generators, and on Windows the release
 link, a headless run of the binary and a 2 048 KB size gate. The gate was met at 312 KB (`x64`) /
