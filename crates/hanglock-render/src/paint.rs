@@ -171,11 +171,15 @@ fn digital_layout(scene: &Scene, theme: &Theme) -> DigitalLayout {
     let radius = scene.card_w.min(scene.card_h) * 0.5;
     let main_chars = scene.text.as_str().chars().count() as f64;
     let suffix_chars = scene.text.suffix_str().chars().count() as f64;
-    let main_units = (main_chars * (f64::from(ADVANCE) + f64::from(TRACKING))
-        - f64::from(TRACKING)).max(0.0);
-    let suffix_ratio = f64::from(theme.suffix_cap);
+    let main_units =
+        (main_chars * (f64::from(ADVANCE) + f64::from(TRACKING)) - f64::from(TRACKING)).max(0.0);
+    let suffix_ratio = theme.suffix_cap;
     let suffix_units = suffix_chars * (f64::from(ADVANCE) + 0.16) * suffix_ratio;
-    let gap_ratio = if suffix_chars > 0.0 { theme.suffix_gap } else { 0.0 };
+    let gap_ratio = if suffix_chars > 0.0 {
+        theme.suffix_gap
+    } else {
+        0.0
+    };
     let units = (main_units + suffix_units + gap_ratio).max(1.0);
     let cap = (scene.card_h * theme.time_cap).min(radius * 0.58).min(radius * 1.45 / units);
     let main_width = main_units * cap;
