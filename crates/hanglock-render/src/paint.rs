@@ -21,14 +21,6 @@ fn rot(o: Vec2, t: f64, p: Vec2) -> Vec2 {
     Vec2::new(o.x + d.x * cs - d.y * sn, o.y + d.x * sn + d.y * cs)
 }
 
-/// Inverse rotation: device space into the plate's own frame.
-#[inline]
-fn unrot(o: Vec2, t: f64, p: Vec2) -> Vec2 {
-    let (cs, sn) = (t.cos(), t.sin());
-    let d = p.sub(o);
-    Vec2::new(o.x + d.x * cs + d.y * sn, o.y - d.x * sn + d.y * cs)
-}
-
 /// An anti-aliased capsule: the set of points within `rad` of segment `a`-`b`.
 ///
 /// `aa` is the ramp width in device px. At 1.05 px it covers exactly the 1-pixel-wide band the
@@ -400,7 +392,7 @@ fn paint_plate(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
             let t = ((p.y - (c.y - radius)) / (2.0 * radius)).clamp(0.0, 1.0);
             let lerp = |u: f64, v: f64| u + (v - u) * t;
             let edge = d.abs();
-            let (r,g,bch,al) = if edge < 1.3 {
+            let (r, g, bch, al) = if edge < 1.3 {
                 (theme.rim.r, theme.rim.g, theme.rim.b, theme.rim.a)
             } else {
                 (lerp(theme.plate_top.r, theme.plate_bottom.r),
