@@ -83,8 +83,18 @@ fn the_window_offers_exactly_the_essential_choices() {
         for r in &g.rows {
             match &r.control {
                 Control::Check { .. } | Control::Push => {}
-                Control::Choice { options, .. } => {
-                    assert!(options.len() > 1, "a choice with one option is a label");
+                // One option is allowed, and is what a single-display machine produces for `Monitor`:
+                // the row still answers "which display is this on", which is worth showing even when
+                // there is nothing to choose. What must never happen is a row that points outside its
+                // own list, or one that lists nothing at all — the tray greys such a submenu, and a
+                // window with a greyed radio and one live caption says the same thing.
+                Control::Choice { options, selected } => {
+                    assert!(!options.is_empty(), "{} offers nothing to pick", r.label);
+                    assert!(
+                        *selected < options.len(),
+                        "{} selects an option it does not list",
+                        r.label
+                    );
                 }
                 Control::Nudge { text, .. } => {
                     assert!(!text.is_empty(), "{} reads as nothing", r.label);
@@ -194,8 +204,39 @@ fn the_cord_row_stops_at_the_ends_of_its_ladder() {
     s.overlay.hang = 151.0;
     assert_eq!(
         panel::hang_index(151.0),
-        3,
-        "and just above it reads as the next"
+        2,
+        "one past a rung is still that rung, until a press moves it"
+    );
+    // The two buttons are the interesting part: `Less` and `More` are enabled exactly when the press
+    // would change something — which at a hand-typed length means both, and at either end means one.
+    let top = panel::HANG_STEPS[panel::HANG_STEPS.len() - 1];
+    let bottom = panel::HANG_STEPS[0];
+    let nudges = |hang: f64| {
+        s.overlay.hang = hang;
+        match control(&s, RowId::HangLength) {
+            Control::Nudge {
+                can_down, can_up, ..
+            } => (can_down, can_up),
+            _ => panic!("the cord row is a nudge"),
+        }
+    };
+    assert_eq!(
+        nudges(151.0),
+        (true, true),
+        "between two rungs, both presses land somewhere"
+    );
+    assert_eq!(
+        nudges(bottom),
+        (false, true),
+        "shorter than shortest: nowhere"
+    );
+    assert_eq!(nudges(top), (true, false), "longer than longest: nowhere");
+    // The last line is the case the rung-derived answer used to get wrong: an enabled `More` whose
+    // press changed nothing at all.
+    assert_eq!(
+        nudges(top - 0.5),
+        (true, true),
+        "half a pixel under the top rung still has somewhere to go"
     );
 }
 
@@ -261,9 +302,19 @@ fn a_click_that_cannot_change_anything_asks_for_nothing() {
     assert_eq!(panel::change(&s, RowId::Monitor, Step::Toggle), None);
     assert_eq!(panel::change(&s, RowId::Seconds, Step::Up), None);
     assert_eq!(
-        panel::change(&s, RowId::ResetPosition, Step::Toggle),
+        panel::change(&s, RowId::ResetPosition, Step::Press),
         Some(Command::ResetPosition),
-        "a push row answers any click on it"
+        "a push row answers its press"
+    );
+    assert_eq!(
+        panel::change(&s, RowId::ResetPosition, Step::Toggle),
+        None,
+        "and it has no checkbox, so a flip asks for nothing"
+    );
+    assert_eq!(
+        panel::change(&s, RowId::ResetPosition, Step::Up),
+        None,
+        "nor any nudge buttons"
     );
     let at_the_top = docs();
     assert_eq!(

@@ -179,8 +179,8 @@ fn clock_group(s: &Settings) -> Group {
                 label: "Cord",
                 control: Control::Nudge {
                     text: cord_text(o.hang),
-                    can_down: hang_index(o.hang) > 0,
-                    can_up: hang_below_top(o.hang),
+                    can_down: hang_can_down(o.hang),
+                    can_up: hang_can_up(o.hang),
                 },
             },
         ],
@@ -255,8 +255,18 @@ pub fn hang_index(hang: f64) -> usize {
     i
 }
 
-fn hang_below_top(hang: f64) -> bool {
-    hang_index(hang) + 1 < HANG_STEPS.len()
+/// Whether `More` would move the cord at all. Asked of the ladder directly rather than of
+/// [`hang_index`], because a hand-typed length just below the top rung has to leave the button live —
+/// that press is what brings it onto the rung — while a length exactly on the top rung has to grey it,
+/// since there is nowhere above to go. A rung-derived answer gets both ends wrong by one.
+fn hang_can_up(hang: f64) -> bool {
+    HANG_STEPS.iter().any(|s| *s > hang + 0.01)
+}
+
+/// The mirror, for `Less`: `step_hang` uses the same `± 0.01` window, which is the only reason a
+/// disabled button and a press that changes nothing cannot disagree.
+fn hang_can_down(hang: f64) -> bool {
+    HANG_STEPS.iter().any(|s| *s < hang - 0.01)
 }
 
 /// The label the `Cord` row shows: the length, and which rung of the ladder that is, so a user who

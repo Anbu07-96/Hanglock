@@ -398,7 +398,10 @@ fps_cap = lots
         );
         let (s, outcome) = load_at(&t.0);
         assert_eq!(outcome, Outcome::Loaded, "junk is not corruption");
-        assert_eq!(s.overlay.opacity, 1.0, "unparseable: the key's own fallback");
+        assert_eq!(
+            s.overlay.opacity, 1.0,
+            "unparseable: the key's own fallback"
+        );
         assert_eq!(s.overlay.scale, 1.4, "the line beside it still landed");
         assert_eq!(
             s.overlay.click_through,
