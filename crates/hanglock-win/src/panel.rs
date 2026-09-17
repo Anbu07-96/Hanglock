@@ -115,21 +115,20 @@ impl Panel {
 
     /// Which row a control id belongs to, and which of that row's parts it is. Counts parts instead of
     /// dividing by a stride, so a row gaining an option cannot collide with its neighbour. `None` for an
-    /// id past the end of the list, which is what a stale child racing a repaint produces.
+    /// id past the end of the list, which is what a stale child racing a repaint produces — and for an
+    /// empty panel, which reaches the same answer the same way: the row simply is not there.
     fn row_part_of(&self, slot: usize) -> Option<(Row, usize)> {
         let mut base = 0;
         for i in 0.. {
-            let Some(row) = self.row_at(i) else {
-                return None;
-            };
+            let row = self.row_at(i)?;
             let k = part_count(&row);
             if slot < base + k {
                 return Some((row, slot - base));
             }
             base += k;
         }
-        // Also the answer for a panel with no rows at all: a `for` over a `RangeFrom` can run zero
-        // times, and rustc rightly refuses to assume it cannot — an empty panel must not be a panic.
+        // A `for` over a `RangeFrom` can run zero times, so this is not a divergence rustc is willing
+        // to assume: an empty panel has to reach a tail, and the tail has to be `None`, not a panic.
         None
     }
 }
