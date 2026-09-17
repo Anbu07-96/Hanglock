@@ -8,14 +8,20 @@ isn't drawn, and near-zero cost while you ignore it.
 overlay, the tray, the settings store. Phase 2 made it usable: the hang point is now a pair of numbers
 the file can hold and Alt+drag can move, the mouse has three named modes with a refusal built into one of
 them, the tray grew into the control surface, and a small native settings window draws the rows the
-model derives. The suite is 110 tests. Every gate this repo has is green in CI, whose three
-jobs cover Linux, Windows `x64` and Windows `arm64`: fmt and clippy `-D warnings`, the suite including the
-golden trace, both generated artefacts against their generators, and on Windows the release link, a
-headless run of the binary and a 2 048 KB size gate it meets at 312 KB (`x64`) / 271 KB (`arm64`). The
-zero-dependency rule that keeps those numbers cheap to hold is
+model derives. There are 110 `#[test]` functions in the workspace plus the 10 doc tests — counted with
+`git ls-files '*.rs' | xargs grep -c '^[[:space:]]*#\[test\]'` rather than remembered — and every number
+in these pages is measured off the tree or off a CI run for the same reason.
+
+CI's three jobs cover Linux, Windows `x64` and Windows `arm64`: fmt and clippy `-D warnings`, the suite
+including the golden trace, both generated artefacts against their generators, and on Windows the release
+link, a headless run of the binary and a 2 048 KB size gate. The gate was met at 312 KB (`x64`) /
+271 KB (`arm64`) by `9dcf3b9`, Phase 1's green run; the Phase 2 commits changed the code those numbers
+describe and their runs have not been read back yet (the sandbox's GitHub credentials expired mid-phase),
+so [`reports/phase-2.md`](reports/phase-2.md) carries the blank columns rather than an estimate. The
+zero-dependency rule that keeps the sizes cheap to hold is
 [ADR-0002](decisions/0002-zero-dependencies.md). Anything that needs a desktop is owed, and listed as
-owed in [`gate-a.md`](gate-a.md); read [`reports/phase-1.md`](reports/phase-1.md) for the phase as a
-whole. The physics and the look were measured and reviewed in a runnable reference model, and a golden
+owed in [`gate-a.md`](gate-a.md); read [`reports/phase-1.md`](reports/phase-1.md) and
+[`reports/phase-2.md`](reports/phase-2.md) for the phases as a whole. The physics and the look were measured and reviewed in a runnable reference model, and a golden
 trace keeps the shipped solver honest to it.
 
 | Doc | What it answers |
