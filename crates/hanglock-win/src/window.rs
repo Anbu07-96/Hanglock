@@ -839,14 +839,7 @@ unsafe fn on_pointer<A: AppHook + 'static>(
                 Vec2::ZERO
             };
             host.last_cursor = pt;
-            app.on_input(
-                host,
-                Input::Move {
-                    at: p,
-                    vel,
-                    dt,
-                },
-            );
+            app.on_input(host, Input::Move { at: p, vel, dt });
             Some(0)
         }
         sys::WM_LBUTTONDOWN => {
@@ -868,10 +861,15 @@ unsafe fn on_pointer<A: AppHook + 'static>(
             Some(0)
         }
         sys::WM_CAPTURECHANGED => {
-
             if host.captured {
                 host.captured = false;
-                app.on_input(host, Input::Release { at: Vec2::ZERO, vel: Vec2::ZERO });
+                app.on_input(
+                    host,
+                    Input::Release {
+                        at: Vec2::ZERO,
+                        vel: Vec2::ZERO,
+                    },
+                );
             }
             Some(0)
         }
