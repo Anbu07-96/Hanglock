@@ -164,11 +164,11 @@ impl Default for RopeConfig {
 impl Default for CardSpec {
     fn default() -> Self {
         Self {
-            width: 252.0,
-            height: 96.0,
-            bracket: 9.0,
-            corner: 17.0,
-            hang: 150.0,
+            width: 156.0,
+            height: 156.0,
+            bracket: 7.0,
+            corner: 78.0,
+            hang: 84.0,
         }
     }
 }

@@ -178,6 +178,7 @@ pub struct Host {
     /// the message's own coordinates, which are window-local and wrap once the pointer is captured and
     /// outside the swept box; see `WM_MOUSEMOVE`.
     last_cursor: sys::POINT,
+    wheel_remainder: i32,
     /// True while the left button is held and captured, so a drag that leaves the window keeps
     /// arriving — which it must, because the pointer can outrun the swept box mid-throw and an
     /// uncaptured drag would strand the plate mid-swing with no release to end it.
@@ -294,6 +295,7 @@ fn new_runtime<A: AppHook + 'static>(app: A, cfg: &OverlayConfig) -> Runtime<A> 
             instance: std::ptr::null_mut(),
             open_panel: |_, _, _| std::ptr::null_mut(),
             last_cursor: sys::POINT { x: 0, y: 0 },
+            wheel_remainder: 0,
             captured: false,
             exit: 0,
         },
@@ -837,11 +839,10 @@ unsafe fn on_pointer<A: AppHook + 'static>(
                 Vec2::ZERO
             };
             host.last_cursor = pt;
-            let f = host.frame;
             app.on_input(
                 host,
                 Input::Move {
-                    at: Vec2::new(p.x - f.x0, p.y - f.y0),
+                    at: p,
                     vel,
                     dt,
                 },
@@ -852,7 +853,6 @@ unsafe fn on_pointer<A: AppHook + 'static>(
             unsafe { sys::SetCapture(hwnd) };
             host.captured = true;
             let (x, y) = (l as i16 as i32 as f64, (l >> 16) as i16 as i32 as f64);
-            let f = host.frame;
             // Alt is read here, at the press, and not from a modifier mask on later moves: a re-anchor
             // has to be decided by the button-down that starts the gesture, or pressing Alt halfway
             // through a swing would teleport the hang point to the cursor. `GetKeyState` answers for the
@@ -861,10 +861,17 @@ unsafe fn on_pointer<A: AppHook + 'static>(
             app.on_input(
                 host,
                 Input::Press {
-                    at: Vec2::new(x - f.x0, y - f.y0),
+                    at: Vec2::new(x, y),
                     alt,
                 },
             );
+            Some(0)
+        }
+        sys::WM_CAPTURECHANGED => {
+            if host.captured {
+                host.captured = false;
+                app.on_input(host, Input::Release { at: Vec2::ZERO, vel: Vec2::ZERO });
+            }
             Some(0)
         }
         sys::WM_LBUTTONUP => {
@@ -875,7 +882,7 @@ unsafe fn on_pointer<A: AppHook + 'static>(
             app.on_input(
                 host,
                 Input::Release {
-                    at: Vec2::new(x - f.x0, y - f.y0),
+                    at: Vec2::new(x, y),
                     vel: Vec2::ZERO,
                 },
             );
@@ -892,7 +899,10 @@ unsafe fn on_pointer<A: AppHook + 'static>(
             Some(0)
         }
         sys::WM_MOUSEWHEEL => {
-            let delta = ((w >> 16) as u16 as i16) as i32 / 120;
+            let raw = ((w >> 16) as u16 as i16) as i32;
+            host.wheel_remainder += raw;
+            let delta = host.wheel_remainder / 120;
+            host.wheel_remainder %= 120;
             if delta != 0 {
                 app.on_input(host, Input::Wheel { delta });
                 host.sync_tick_timer();

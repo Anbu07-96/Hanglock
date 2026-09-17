@@ -381,77 +381,40 @@ fn paint_mount(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
 /// shadow band fall out of the same signed distance and corner half-widths.
 fn paint_plate(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
     let c = scene.card_centre;
-    let half = Vec2::new(scene.card_w * 0.5, scene.card_h * 0.5);
-    let rot_extent =
-        (half.x.abs() * scene.theta.cos().abs() + half.y.abs() * scene.theta.sin().abs()) + 1.0;
-    let rot_extent_y =
-        (half.x.abs() * scene.theta.sin().abs() + half.y.abs() * scene.theta.cos().abs()) + 1.0;
-    let extent = Vec2::new(rot_extent, rot_extent_y);
-    box_shadow(
-        cv,
-        c,
-        extent,
-        scene.corner,
-        theme.shadow_drop * scene.scale,
-        theme.shadow_blur * scene.scale,
-        theme.shadow_alpha * scene.opacity,
-    );
-
-    // Body, gradient and rim, painted in the plate's frame.
-    let x0 = (c.x - extent.x - 1.5).floor() as i64;
-    let x1 = (c.x + extent.x + 1.5).ceil() as i64;
-    let y0 = (c.y - extent.y - 1.5).floor() as i64;
-    let y1 = (c.y + extent.y + 1.5).ceil() as i64;
+    let radius = scene.card_w.min(scene.card_h) * 0.5;
+    let shadow = theme.shadow_alpha * scene.opacity;
+    let extent = radius + theme.shadow_blur * scene.scale + 3.0;
+    box_shadow(cv, c, Vec2::new(radius, radius), radius, theme.shadow_drop * scene.scale,
+        theme.shadow_blur * scene.scale, shadow);
+    let x0 = (c.x - extent).floor() as i64;
+    let x1 = (c.x + extent).ceil() as i64;
+    let y0 = (c.y - extent).floor() as i64;
+    let y1 = (c.y + extent).ceil() as i64;
     let (w_, h_) = (i64::from(cv.w), i64::from(cv.h));
     for y in y0.max(0)..=y1.min(h_ - 1) {
         for x in x0.max(0)..=x1.min(w_ - 1) {
             let p = centre(x as i32, y as i32);
-            let l = unrot(c, scene.theta, p);
-            let d = sdf_round_box(l.sub(c), half, scene.corner);
+            let d = p.dist(c) - radius;
             let cov = smooth(0.55, -0.55, d);
-            if cov <= 0.0005 {
-                continue;
-            }
-            let t = ((l.y - (c.y - half.y)) / (2.0 * half.y)).clamp(0.0, 1.0);
-            let lerp = |a: f64, b: f64| a + (b - a) * t;
-            let (mut r, mut g, mut bch, mut al) = (
-                lerp(theme.plate_top.r, theme.plate_bottom.r),
-                lerp(theme.plate_top.g, theme.plate_bottom.g),
-                lerp(theme.plate_top.b, theme.plate_bottom.b),
-                lerp(theme.plate_top.a, theme.plate_bottom.a),
-            );
-            let ad = d.abs();
-            if ad < 0.9 {
-                (r, g, bch, al) = (theme.rim.r, theme.rim.g, theme.rim.b, theme.rim.a);
-            } else if ad < 1.6 {
-                if l.y < c.y - half.y + 1.6 {
-                    (r, g, bch, al) = (
-                        theme.rim_top.r,
-                        theme.rim_top.g,
-                        theme.rim_top.b,
-                        theme.rim_top.a,
-                    );
-                } else if l.y > c.y + half.y - 2.0 {
-                    r = theme.rim_bottom.r;
-                    g = theme.rim_bottom.g;
-                    bch = theme.rim_bottom.b;
-                    al = al.max(theme.rim_bottom.a);
-                }
-            }
+            if cov <= 0.0005 { continue; }
+            let t = ((p.y - (c.y - radius)) / (2.0 * radius)).clamp(0.0, 1.0);
+            let lerp = |u: f64, v: f64| u + (v - u) * t;
+            let edge = d.abs();
+            let (r,g,bch,al) = if edge < 1.3 {
+                (theme.rim.r, theme.rim.g, theme.rim.b, theme.rim.a)
+            } else {
+                (lerp(theme.plate_top.r, theme.plate_bottom.r),
+                 lerp(theme.plate_top.g, theme.plate_bottom.g),
+                 lerp(theme.plate_top.b, theme.plate_bottom.b),
+                 lerp(theme.plate_top.a, theme.plate_bottom.a))
+            };
             let a2 = al * cov * scene.opacity;
-            cv.blend(
-                x as i32,
-                y as i32,
-                (bch * 255.0 * a2) as u16,
-                (g * 255.0 * a2) as u16,
-                (r * 255.0 * a2) as u16,
-                (a2 * 255.0) as u16,
-            );
+            cv.blend(x as i32, y as i32, (bch*255.0*a2) as u16,
+                (g*255.0*a2) as u16, (r*255.0*a2) as u16, (a2*255.0) as u16);
         }
-        cv.touch_row(y as i32, x0.max(0) as i32, x1.min(w_ - 1) as i32);
+        cv.touch_row(y as i32, x0.max(0) as i32, x1.min(w_-1) as i32);
     }
 }
-
 pub fn paint(scene: &Scene, cv: &mut Canvas, theme: &Theme) {
     cv.clear();
     let n = scene.node_count as usize;
