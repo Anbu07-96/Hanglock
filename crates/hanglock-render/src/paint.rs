@@ -158,9 +158,43 @@ pub fn text_advance(chars: usize, cap: f64) -> f64 {
         - cap * f64::from(TRACKING)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DigitalLayout {
+    cap: f64,
+    main_x: f64,
+    y: f64,
+    suffix_cap: f64,
+    suffix_x: f64,
+}
+
+fn digital_layout(scene: &Scene, theme: &Theme) -> DigitalLayout {
+    let radius = scene.card_w.min(scene.card_h) * 0.5;
+    let main_chars = scene.text.as_str().chars().count() as f64;
+    let suffix_chars = scene.text.suffix_str().chars().count() as f64;
+    let main_units = (main_chars * (f64::from(ADVANCE) + f64::from(TRACKING))
+        - f64::from(TRACKING)).max(0.0);
+    let suffix_ratio = f64::from(theme.suffix_cap);
+    let suffix_units = suffix_chars * (f64::from(ADVANCE) + 0.16) * suffix_ratio;
+    let gap_ratio = if suffix_chars > 0.0 { theme.suffix_gap } else { 0.0 };
+    let units = (main_units + suffix_units + gap_ratio).max(1.0);
+    let cap = (scene.card_h * theme.time_cap).min(radius * 0.58).min(radius * 1.45 / units);
+    let main_width = main_units * cap;
+    let gap = gap_ratio * cap;
+    let suffix_width = suffix_units * cap;
+    let total = main_width + gap + suffix_width;
+    let y = scene.card_centre.y - cap * 0.5;
+    DigitalLayout {
+        cap,
+        main_x: scene.card_centre.x - total * 0.5,
+        y,
+        suffix_cap: cap * suffix_ratio,
+        suffix_x: scene.card_centre.x - total * 0.5 + main_width + gap,
+    }
+}
+
 #[must_use]
 pub fn time_cap(scene: &Scene, theme: &Theme) -> f64 {
-    scene.card_h * theme.time_cap
+    digital_layout(scene, theme).cap
 }
 
 /// The digits' bounding box, device px, including the meridiem. The app presents only this rect
@@ -169,22 +203,15 @@ pub fn time_cap(scene: &Scene, theme: &Theme) -> f64 {
 #[must_use]
 pub fn text_bounds(scene: &Scene, theme: &Theme) -> Rect {
     let centre = scene.card_centre;
-    let cap = time_cap(scene, theme);
+    let layout = digital_layout(scene, theme);
+    let cap = layout.cap;
     let rad = f64::from(STROKE_RATIO) * 0.5 * cap;
     let mut b = [f64::MAX, f64::MAX, f64::MIN, f64::MIN];
-    let adv = |s: &str| s.chars().count();
     let main = scene.text.as_str();
-    let total = text_advance(adv(main), cap);
     let suffix = scene.text.suffix_str();
-    let scap = scene.card_h * theme.suffix_cap;
-    let stotal = text_advance(adv(suffix), scap);
-    let gap = if suffix.is_empty() {
-        0.0
-    } else {
-        theme.suffix_gap * scene.scale
-    };
-    let ox = centre.x - (total + gap + stotal) * 0.5;
-    let oy = centre.y - scene.card_h * 0.5 + (scene.card_h - cap) * 0.5;
+    let ox = layout.main_x;
+    let oy = layout.y;
+    let scap = layout.suffix_cap;
     for (i, ch) in main.chars().enumerate() {
         let Some(g) = face_data::glyph(ch) else {
             continue;
@@ -216,8 +243,8 @@ pub fn text_bounds(scene: &Scene, theme: &Theme) -> Rect {
         }
     }
     if !suffix.is_empty() {
-        let sox = ox + total + gap;
-        let soy = oy - scap * 0.12;
+        let sox = layout.suffix_x;
+        let soy = oy + (cap - scap) * 0.35;
         for (i, ch) in suffix.chars().enumerate() {
             let Some(g) = face_data::glyph(ch) else {
                 continue;
@@ -246,20 +273,14 @@ pub fn text_bounds(scene: &Scene, theme: &Theme) -> Rect {
 
 fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
     let centre = scene.card_centre;
-    let cap = time_cap(scene, theme);
+    let layout = digital_layout(scene, theme);
+    let cap = layout.cap;
     let rad = f64::from(STROKE_RATIO) * 0.5 * cap;
     let main = scene.text.as_str();
-    let total = text_advance(main.chars().count(), cap);
     let suffix = scene.text.suffix_str();
-    let scap = scene.card_h * theme.suffix_cap;
-    let stotal = text_advance(suffix.chars().count(), scap);
-    let gap = if suffix.is_empty() {
-        0.0
-    } else {
-        theme.suffix_gap * scene.scale
-    };
-    let ox = centre.x - (total + gap + stotal) * 0.5;
-    let oy = centre.y - scene.card_h * 0.5 + (scene.card_h - cap) * 0.5;
+    let ox = layout.main_x;
+    let oy = layout.y;
+    let scap = layout.suffix_cap;
 
     for (i, ch) in main.chars().enumerate() {
         let Some(g) = face_data::glyph(ch) else {
@@ -294,8 +315,8 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
         }
     }
     if !suffix.is_empty() {
-        let sox = ox + total + gap;
-        let soy = oy - scap * 0.12;
+        let sox = layout.suffix_x;
+        let soy = oy + (cap - scap) * 0.35;
         for (i, ch) in suffix.chars().enumerate() {
             let Some(g) = face_data::glyph(ch) else {
                 continue;

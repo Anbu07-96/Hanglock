@@ -62,9 +62,9 @@ impl Default for Theme {
             shadow_alpha: 0.30,
             shadow_blur: 7.5,
             shadow_drop: 7.0,
-            time_cap: 0.50,
-            suffix_cap: 0.167,
-            suffix_gap: 10.0,
+            time_cap: 0.34,
+            suffix_cap: 0.24,
+            suffix_gap: 0.18,
         }
     }
 }
