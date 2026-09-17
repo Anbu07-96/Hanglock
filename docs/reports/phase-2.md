@@ -183,10 +183,13 @@ No new face, no themes, no second style — the brief said polish the one clock,
 * `Hang from this display` and the mode names in the tray are in the same words as the settings window,
   because both read `label()` on the enum rather than their own strings.
 * The card's own context menu and the tray's menu are the same list, so learning one is learning both.
-* Digits, plate, rim light, shadow, AM/PM and seconds layout: untouched, and `--dump-scene`'s PNG is
-  byte-identical to Phase 1's at the default settings, because `place()` with `anchor_drop = 0` reproduces
-  the Phase 1 geometry exactly — which is also why the six existing placement tests were left with their
-  assertions unchanged apart from the new argument: CI passing them *is* the pin.
+* Digits, plate, rim light, shadow, AM/PM and seconds layout: untouched. What CI publishes about that is a
+  byte *count*: both ABIs wrote `559897 bytes written by --dump-scene`, which is the figure Phase 1's green
+  run published, so the headless picture is the same size on the same two machines. It is not a hash — the
+  artifact blob host refuses this environment exactly as the log hosts do, so nobody has compared pixels from
+  here, and the report will not pretend otherwise. What pins the geometry is the suite instead: `place()` at
+  `anchor_drop = 0` reproduces the Phase 1 placement, asserted in `core/tests/placement.rs`, and those tests
+  kept their assertions apart from the new argument. CI passing them *is* the pin.
 
 ## 7. Tests added
 
@@ -361,8 +364,9 @@ mouse will do, in the words the tray menu uses.
    reproduces the default position exactly and nothing else. Porting the second parameter is one function,
    but it would regenerate `tests/golden/trace_drag_settle.*` and re-open every physics number published in
    Phase 1, which is a worse trade than a preview set that stops at the default.
-9. Still no installer, no `CHANGELOG`, no signed binary: Phase 1's §16 items 4–6 survive untouched, and
-   the release now blocks on numbers this phase changed rather than on packaging code.
+9. Still no installer, no `CHANGELOG`, no signed binary: Phase 1's §16 items 4–6 survive untouched. The
+   numbers they were waiting on are published in §9–§12, so what stands between this and `v0.1.0` is the
+   desktop list in §17 and the packaging decisions themselves — not the arithmetic.
 10. **The infrastructure this phase depended on is fragile, and it bit twice.** The sandbox's GitHub token
     expired mid-phase (run results unreadable for several cycles) and the sandbox was later reset, which
     collapsed the local history onto the root commit while leaving the working tree intact — recovered by
