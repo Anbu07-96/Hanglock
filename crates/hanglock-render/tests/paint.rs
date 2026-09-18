@@ -11,12 +11,16 @@ use hanglock_core::vec2::Vec2;
 use hanglock_render::{paint, Canvas, Theme};
 
 fn scene_at(theta: f64, centre: Vec2, text: FaceText) -> Scene {
+    scene_at_scale(theta, centre, text, 1.0)
+}
+
+fn scene_at_scale(theta: f64, centre: Vec2, text: FaceText, scale: f64) -> Scene {
     let mut rope = Rope::new(
         RopeConfig::default(),
         CardSpec::default(),
         Posture::PLATE,
         Vec2::new(280.0, 14.0),
-        1.0,
+        scale,
     );
     rope.host = Some(Rect::new(0.0, 0.0, 700.0, 400.0));
     for _ in 0..200 {
@@ -141,6 +145,24 @@ fn painting_is_deterministic() {
     );
 }
 
+fn face_with_seconds() -> FaceText {
+    format(
+        &Civil {
+            year: 2026,
+            month: 9,
+            day: 15,
+            hour: 22,
+            minute: 42,
+            second: 7,
+        },
+        &FaceOptions {
+            hour12: true,
+            seconds: true,
+            meridiem: true,
+        },
+    )
+}
+
 #[test]
 fn every_clock_style_paints_a_distinct_nonempty_face() {
     let base = scene_at(0.0, Vec2::new(320.0, 220.0), face("10:42"));
@@ -166,6 +188,45 @@ fn every_clock_style_paints_a_distinct_nonempty_face() {
         3,
         "the selectable styles must not collapse to one image"
     );
+}
+
+#[test]
+fn premium_seconds_and_meridiem_fit_at_supported_dpi_scales() {
+    let theme = Theme::for_style(hanglock_core::ids::ClockStyle::PremiumMetalGlass);
+    for scale in [1.0, 1.5, 2.0] {
+        let centre = Vec2::new(360.0, 250.0);
+        let mut sc = scene_at_scale(0.0, centre, face_with_seconds(), scale);
+        sc.style = hanglock_core::ids::ClockStyle::PremiumMetalGlass;
+        let bounds = hanglock_render::paint::text_bounds(&sc, &theme);
+        let face_radius = sc.card_w.min(sc.card_h) * 0.5 - theme.inset * scale;
+        assert!(bounds.x0 >= centre.x - face_radius, "{scale}x left overflow");
+        assert!(bounds.x1 <= centre.x + face_radius, "{scale}x right overflow");
+        assert!(bounds.y0 >= centre.y - face_radius, "{scale}x top overflow");
+        assert!(bounds.y1 <= centre.y + face_radius, "{scale}x bottom overflow");
+
+        let mut cv = Canvas::new(800, 560);
+        paint(&sc, &mut cv, &theme);
+        assert!(cv.alpha_at(centre.x as u32, centre.y as u32) > 200);
+    }
+}
+
+#[test]
+fn premium_attachment_rotates_with_the_body() {
+    let theme = Theme::for_style(hanglock_core::ids::ClockStyle::PremiumMetalGlass);
+    for theta in [-0.25_f64, 0.0, 0.25] {
+        let centre = Vec2::new(360.0, 250.0);
+        let mut sc = scene_at(theta, centre, face("10:42"));
+        sc.style = hanglock_core::ids::ClockStyle::PremiumMetalGlass;
+        let radius = sc.card_w.min(sc.card_h) * 0.5;
+        let up = Vec2::new(theta.sin(), -theta.cos());
+        let connector = centre.add(up.scale(radius + 11.8));
+        let mut cv = Canvas::new(800, 560);
+        paint(&sc, &mut cv, &theme);
+        assert!(
+            cv.alpha_at(connector.x as u32, connector.y as u32) > 100,
+            "connector did not follow theta={theta}"
+        );
+    }
 }
 
 #[test]

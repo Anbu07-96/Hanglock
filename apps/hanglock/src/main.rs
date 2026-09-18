@@ -12,6 +12,7 @@
 //! hanglock                     run the overlay
 //! hanglock --dump-scene PATH   paint one settled frame to PATH.png and exit   (any OS)
 //! hanglock --dump-styles DIR   paint one production frame per clock style
+//! hanglock --dump-premium DIR  paint premium approval frames at 100-200% DPI
 //! hanglock --bench N           paint N frames, print ns/frame and present bytes (any OS)
 //! hanglock --diag              print settings, displays, placement, budgets   (any OS)
 //! hanglock --background        no-op marker used by the autostart entry
@@ -65,6 +66,18 @@ fn main() -> ExitCode {
         return match model::dump_styles(&settings, &path) {
             Ok(files) => {
                 println!("wrote {} style previews to {path}", files.len());
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("hanglock: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+    if let Some(path) = flag_value(&args, "--dump-premium") {
+        return match model::dump_premium(&settings, &path) {
+            Ok(files) => {
+                println!("wrote {} premium previews to {path}", files.len());
                 ExitCode::SUCCESS
             }
             Err(e) => {
@@ -136,6 +149,7 @@ fn help_text() -> &'static str {
   (no arguments)         show the clock; controls are in the tray and on right-click
   --dump-scene FILE.png  render one frame and exit (works headless, for review)
   --dump-styles DIR      render one production preview per selectable style
+  --dump-premium DIR     render premium approval frames at 100, 150 and 200% DPI
   --bench [n]            paint n frames (default 400) and print per-frame costs
   --diag                 print settings, placement and measured budgets
   --background           silent start, used by the autostart entry

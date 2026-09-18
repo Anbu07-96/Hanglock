@@ -839,12 +839,21 @@ fn face_of(s: &Settings, fields: (u32, u32, u32, u32, u32, u32)) -> FaceText {
 /// Render one settled frame. This is how the visual design was reviewed on a machine with no
 /// desktop: the painter and the model run unchanged, and the output is the real thing.
 pub fn dump_scene(settings: &Settings, path: &str) -> Result<usize, String> {
+    dump_scene_variant(settings, path, 1.0, 0.0)
+}
+
+fn dump_scene_variant(
+    settings: &Settings,
+    path: &str,
+    monitor_scale: f64,
+    theta: f64,
+) -> Result<usize, String> {
     let mut m = Model::new(*settings);
     let m0 = Monitor {
         index: 0,
         bounds: Rect::new(0.0, 0.0, 1920.0, 1080.0),
         work: Rect::new(0.0, 0.0, 1920.0, 1040.0),
-        scale: 1.0,
+        scale: monitor_scale,
         taskbar_top: false,
         taskbar_auto_hidden: false,
         primary: true,
@@ -855,6 +864,7 @@ pub fn dump_scene(settings: &Settings, path: &str) -> Result<usize, String> {
     for _ in 0..40 {
         m.rope.step(1.0 / 60.0);
     }
+    m.rope.att.theta = theta;
     m.paint();
     let png = hanglock_render::png::encode(&m.canvas);
     std::fs::write(path, &png).map_err(|e| format!("{path}: {e}"))?;
@@ -872,6 +882,30 @@ pub fn dump_styles(settings: &Settings, dir: &str) -> Result<Vec<String>, String
         let path = std::path::Path::new(dir).join(format!("{}.png", style.as_str()));
         let shown = path.to_string_lossy().into_owned();
         dump_scene(&styled, &shown)?;
+        written.push(shown);
+    }
+    Ok(written)
+}
+
+/// Production-rendered approval frames for the premium style. The three scale variants exercise
+/// the same physical-pixel path Windows uses at 100, 150 and 200 percent DPI.
+pub fn dump_premium(settings: &Settings, dir: &str) -> Result<Vec<String>, String> {
+    std::fs::create_dir_all(dir).map_err(|e| format!("{dir}: {e}"))?;
+    let variants = [
+        ("premium-rest-100.png", 1.0, false, 0.0),
+        ("premium-seconds-100.png", 1.0, true, 0.0),
+        ("premium-swung-100.png", 1.0, false, 0.18),
+        ("premium-seconds-150.png", 1.5, true, 0.0),
+        ("premium-seconds-200.png", 2.0, true, 0.0),
+    ];
+    let mut written = Vec::with_capacity(variants.len());
+    for (name, scale, seconds, theta) in variants {
+        let mut styled = *settings;
+        styled.face.style = hanglock_core::ids::ClockStyle::PremiumMetalGlass;
+        styled.face.seconds = seconds;
+        let path = std::path::Path::new(dir).join(name);
+        let shown = path.to_string_lossy().into_owned();
+        dump_scene_variant(&styled, &shown, scale, theta)?;
         written.push(shown);
     }
     Ok(written)
