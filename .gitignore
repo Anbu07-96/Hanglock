@@ -1,0 +1,25 @@
+# Build artifacts
+/target
+/dist
+/**/*.rs.bk
+
+# Local, never committed
+/.env
+*.log
+/scratch
+assets/**/*.tmp
+
+# Editor / OS noise
+/.idea
+/.vs
+*.user
+Thumbs.db
+
+# Python tooling in tools/model (the reference model runs here; the product does not)
+__pycache__/
+*.pyc
+
+# `patch` leaves these behind when a hunk needs fuzz, and a stray backup is worse in the tree
+# than in the working directory: it is a second copy of a source file that nothing reads.
+*.orig
+*.rej

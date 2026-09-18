@@ -1,0 +1,181 @@
+name: CI
+
+on:
+  push:
+    # 'arena/**' is the branch Phase 1 was built and CI-tested on, before this file existed on main.
+    # The pull_request trigger covers it from the merge onwards: drop the wildcard once main carries it.
+    branches: [main, 'arena/**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # The model, the solver and the painter have no OS in them, so Linux runs the full suite. This is
+  # the job that catches a physics regression, and it costs nothing to keep.
+  core:
+    name: Model + painter (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.77.2
+        with:
+          components: rustfmt, clippy
+      - name: Format
+        run: tools/ci/run-and-annotate.sh cargo_fmt fmt.diff -- cargo fmt --all -- --check
+      - name: Clippy
+        run: tools/ci/run-and-annotate.sh cargo_clippy clippy.log -- cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test
+        # A green run has a number worth keeping too. The per-target `test result:` lines are folded
+        # into one notice, unit and doc counts apart, so "how many tests ran" is a figure measured by the
+        # machine that ran them and not a grep of a step log that nobody can open (tools/ci/notice.py).
+        run: |
+          tools/ci/run-and-annotate.sh cargo_test test.log -- cargo test --workspace
+          awk '
+            /^ *Doc-tests / { doc = 1 }
+            /^test result:/ { if (doc) { dp += $4; df += $6 } else { up += $4; uf += $6 } }
+            END { printf "unit %d passed, %d failed | doc %d passed, %d failed\n", up, uf, dp, df }
+          ' test.log > test-summary.log
+          python3 tools/ci/notice.py "tests (linux)" test-summary.log 1
+      - name: Golden trace is current
+        # Two artefacts are checked in *and* generated, and both are checked here: the golden trace
+        # (which `tests/golden_trace.rs` pins the solver to) and the face data (which is the reviewed
+        # face, transcribed). Without this step a golden silently becomes fiction — the solver would
+        # then be locking itself to whatever it happens to do today.
+        #
+        # The comparison is `tools/ci/currency.py`, not `diff`: the committed Rust has been through
+        # `cargo fmt`, whose layout is not drift, while the trace was generated on another machine and
+        # stores 7 decimals, so a last-digit libm choice is not drift either. Both rules are far
+        # tighter than anything a real change can produce. Each half logs and annotates separately.
+        run: |
+          python3 tools/ci/currency.py trace tests/golden/trace_drag_settle.txt tests/golden/trace_drag_settle.json -- python3 tools/model/hanglock_ref.py trace > golden.log 2>&1 || {
+            cat golden.log
+            python3 tools/ci/emit.py golden_currency golden.log
+            exit 1; }
+          python3 tools/ci/currency.py source crates/hanglock-render/src/face_data.rs -- python3 tools/model/gen_face.py > face_data.log 2>&1 || {
+            cat face_data.log
+            python3 tools/ci/emit.py face_data_currency face_data.log
+            exit 1; }
+          cat golden.log face_data.log
+      - name: Bench (informational)
+        # The gate is the run: it must compile, paint and exit 0. The notice is so the measured
+        # number lands in the run's record rather than only in a step log (see tools/ci/notice.py).
+        run: |
+          tools/ci/run-and-annotate.sh bench_300 bench.log -- cargo run --release -p hanglock -- --bench 300
+          python3 tools/ci/notice.py "bench 300 frames" bench.log 5
+      - name: Asset provenance
+        # No artwork may enter the repo without a provenance line (docs/research/ip-boundaries.md).
+        # With no binary assets today, the check is that the set stays explained.
+        run: |
+          for f in $(find assets docs/previews -type f ! -name 'SOURCES.md' 2>/dev/null); do
+            base=$(basename "$f")
+            grep -q -- "$base" assets/SOURCES.md || { echo "::error::$f has no provenance line in assets/SOURCES.md"; exit 1; }
+          done
+          echo "asset provenance recorded for $(find assets docs/previews -type f ! -name SOURCES.md | wc -l) files"
+
+  windows:
+    name: Build + test (Windows ${{ matrix.arch }})
+    # The host must match the target. `cargo test` runs the binaries it builds, and an x64 host
+    # refuses to execute an aarch64 image ("This version of %1 is not compatible...", os error 216),
+    # so cross-arch testing on one runner cannot work in either direction. GitHub's arm64 Windows
+    # runner is free for public repos, so aarch64 gets a native host and its suite actually runs.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64-pc-windows-msvc
+            os: windows-latest
+          - arch: aarch64-pc-windows-msvc
+            os: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.77.2
+        with:
+          targets: ${{ matrix.arch }}
+      - name: Clippy
+        run: |
+          cargo clippy --workspace --all-targets --target ${{ matrix.arch }} -- -D warnings *> clippy.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content clippy.log
+            python tools/ci/emit.py "clippy ${{ matrix.arch }}" clippy.log
+            exit 1
+          }
+      - name: Test
+        # The Win32 layer has no unit tests by policy (see docs/architecture.md §9); this runs the
+        # rest of the workspace on the real target and proves the unsafe crate *compiles* there.
+        run: |
+          cargo test --workspace --target ${{ matrix.arch }} *> test.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content test.log
+            python tools/ci/emit.py "test ${{ matrix.arch }}" test.log
+            exit 1
+          }
+          # Same figure as the Linux job publishes, per architecture, so the two ABIs can be compared
+          # from the run record alone. Anything after this block runs only when the tests passed.
+          $up = 0; $uf = 0; $dp = 0; $df = 0; $doc = $false
+          foreach ($line in Get-Content test.log) {
+            if ($line -match '^\s*Doc-tests ') { $doc = $true; continue }
+            if ($line -match '^test result: \S+ (\d+) passed; (\d+) failed') {
+              if ($doc) { $dp += [int]$Matches[1]; $df += [int]$Matches[2] }
+              else { $up += [int]$Matches[1]; $uf += [int]$Matches[2] }
+            }
+          }
+          "unit $up passed, $uf failed | doc $dp passed, $df failed" | Set-Content test-summary.log
+          python tools/ci/notice.py "tests (${{ matrix.arch }})" test-summary.log 1
+      - name: Build release
+        run: |
+          cargo build --release --target ${{ matrix.arch }} -p hanglock *> build.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content build.log
+            python tools/ci/emit.py "build ${{ matrix.arch }}" build.log
+            exit 1
+          }
+      - name: "Smoke: the binary runs headless on Windows"
+        # Each mode is the one the docs claim works with no desktop, and each one's output is kept:
+        # a red smoke step has to say *why* in a channel the analysis environment can read, not just
+        # that it went red. The notices put the measured lines in the record; they are PowerShell so
+        # that a gate that passed cannot be turned red by the notice itself.
+        shell: pwsh
+        run: |
+          $exe = "target/${{ matrix.arch }}/release/hanglock.exe"
+          & $exe --diag 2>&1 | Tee-Object -FilePath diag.txt
+          if ($LASTEXITCODE -ne 0) { python tools/ci/emit.py "smoke diag ${{ matrix.arch }}" diag.txt; exit 1 }
+          & $exe --bench 200 2>&1 | Tee-Object -FilePath bench.txt -Append
+          if ($LASTEXITCODE -ne 0) { python tools/ci/emit.py "smoke bench ${{ matrix.arch }}" bench.txt; exit 1 }
+          & $exe --dump-scene scene.png 2>&1 | Tee-Object -FilePath dump.txt
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path scene.png)) { python tools/ci/emit.py "smoke dump ${{ matrix.arch }}" dump.txt; exit 1 }
+          & $exe --dump-styles style-previews 2>&1 | Tee-Object -FilePath dump-styles.txt
+          if ($LASTEXITCODE -ne 0 -or (Get-ChildItem style-previews/*.png).Count -ne 3) { python tools/ci/emit.py "style previews ${{ matrix.arch }}" dump-styles.txt; exit 1 }
+          & $exe --dump-premium premium-previews 2>&1 | Tee-Object -FilePath dump-premium.txt
+          if ($LASTEXITCODE -ne 0 -or (Get-ChildItem premium-previews/*.png).Count -ne 5) { python tools/ci/emit.py "premium previews ${{ matrix.arch }}" dump-premium.txt; exit 1 }
+          $d = ((Get-Content diag.txt | Where-Object { $_ -ne "" }) -join " / ") -replace "::", ":"
+          Write-Host "::notice title=smoke diag ${{ matrix.arch }}::$d"
+          $b = (((Get-Content bench.txt | Where-Object { $_ -ne "" }) | Select-Object -Last 5) -join " / ") -replace "::", ":"
+          Write-Host "::notice title=smoke bench ${{ matrix.arch }}::$b"
+          Write-Host "::notice title=smoke scene ${{ matrix.arch }}::$((Get-Item scene.png).Length) bytes written by --dump-scene"
+      - name: Size gate
+        shell: pwsh
+        run: |
+          $exe = Get-Item "target/${{ matrix.arch }}/release/hanglock.exe"
+          $kb = [math]::Ceiling($exe.Length / 1KB)
+          Write-Host "hanglock.exe = $kb KB (budget 2048 KB)"
+          Write-Host "::notice title=exe size ${{ matrix.arch }}::$kb KB of a 2048 KB budget ($($exe.Length) bytes)"
+          if ($kb -gt 2048) { "::error::executable is $kb KB, over the 2048 KB budget"; exit 1 }
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hanglock-${{ matrix.arch }}
+          path: |
+            target/${{ matrix.arch }}/release/hanglock.exe
+            diag.txt
+            bench.txt
+            scene.png
+            style-previews/*.png
+            premium-previews/*.png
