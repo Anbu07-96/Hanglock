@@ -221,8 +221,7 @@ impl DigitalLayout {
             (
                 self.main_x
                     + index as f64
-                        * (self.cap * f64::from(ADVANCE)
-                            + self.cap * f64::from(TRACKING)),
+                        * (self.cap * f64::from(ADVANCE) + self.cap * f64::from(TRACKING)),
                 self.cap,
             )
         } else {
@@ -418,14 +417,7 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
                     glyph_y + f64::from(d.y) * glyph_cap,
                 ),
             );
-            capsule(
-                cv,
-                p,
-                p,
-                f64::from(d.r) * glyph_cap * 0.95,
-                theme.ink,
-                1.05,
-            );
+            capsule(cv, p, p, f64::from(d.r) * glyph_cap * 0.95, theme.ink, 1.05);
         }
     }
     if !suffix.is_empty() {
