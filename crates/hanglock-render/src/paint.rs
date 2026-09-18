@@ -584,11 +584,23 @@ fn draw_premium_line(cv: &mut Canvas, scene: &Scene, line: &[face_data::Pt], gly
                     ),
                 )
             };
-            flat_stroke(cv, point(pair[0]), point(pair[1]), stroke_radius, colour, 1.05);
+            flat_stroke(
+                cv,
+                point(pair[0]),
+                point(pair[1]),
+                stroke_radius,
+                colour,
+                1.05,
+            );
         }
         // Rounded joins only at internal vertices. The start and end remain deliberately flat,
         // preserving the designed terminals while removing scallops from curved outlines.
-        for p in line.iter().copied().skip(1).take(line.len().saturating_sub(2)) {
+        for p in line
+            .iter()
+            .copied()
+            .skip(1)
+            .take(line.len().saturating_sub(2))
+        {
             let q = rot(
                 centre,
                 scene.theta,
