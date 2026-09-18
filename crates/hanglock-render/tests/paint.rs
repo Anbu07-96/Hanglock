@@ -199,10 +199,19 @@ fn premium_seconds_and_meridiem_fit_at_supported_dpi_scales() {
         sc.style = hanglock_core::ids::ClockStyle::PremiumMetalGlass;
         let bounds = hanglock_render::paint::text_bounds(&sc, &theme);
         let face_radius = sc.card_w.min(sc.card_h) * 0.5 - theme.inset * scale;
-        assert!(bounds.x0 >= centre.x - face_radius, "{scale}x left overflow");
-        assert!(bounds.x1 <= centre.x + face_radius, "{scale}x right overflow");
+        assert!(
+            bounds.x0 >= centre.x - face_radius,
+            "{scale}x left overflow"
+        );
+        assert!(
+            bounds.x1 <= centre.x + face_radius,
+            "{scale}x right overflow"
+        );
         assert!(bounds.y0 >= centre.y - face_radius, "{scale}x top overflow");
-        assert!(bounds.y1 <= centre.y + face_radius, "{scale}x bottom overflow");
+        assert!(
+            bounds.y1 <= centre.y + face_radius,
+            "{scale}x bottom overflow"
+        );
 
         let mut cv = Canvas::new(800, 560);
         paint(&sc, &mut cv, &theme);

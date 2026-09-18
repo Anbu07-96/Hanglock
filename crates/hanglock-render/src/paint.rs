@@ -274,8 +274,7 @@ fn tapered_connector(cv: &mut Canvas, c: Vec2, theta: f64, scale: f64) {
             if cov <= 0.002 {
                 continue;
             }
-            let key = ((-local.x / bottom_w - local.y / half_h) * 0.16 + 0.48)
-                .clamp(0.0, 1.0);
+            let key = ((-local.x / bottom_w - local.y / half_h) * 0.16 + 0.48).clamp(0.0, 1.0);
             let base = 0.31 + key * 0.34;
             cv.blend(
                 x as i32,
@@ -510,14 +509,60 @@ pub fn text_bounds(scene: &Scene, theme: &Theme) -> Rect {
     Rect::new(b[0], b[1], b[2], b[3])
 }
 
+fn draw_suffix(cv: &mut Canvas, scene: &Scene, theme: &Theme, layout: DigitalLayout) {
+    let suffix = scene.text.suffix_str();
+    if suffix.is_empty() {
+        return;
+    }
+    let centre = scene.card_centre;
+    let scap = layout.suffix_cap;
+    let sox = layout.suffix_x;
+    let soy = layout.suffix_y;
+    for (i, ch) in suffix.chars().enumerate() {
+        let Some(g) = face_data::glyph(ch) else {
+            continue;
+        };
+        let gx = sox + i as f64 * (scap * f64::from(ADVANCE) + scap * 0.16);
+        for ln in g.lines {
+            if ln.len() < 2 {
+                continue;
+            }
+            for w in ln.windows(2) {
+                let a = rot(
+                    centre,
+                    scene.theta,
+                    Vec2::new(
+                        gx + f64::from(w[0].x) * scap,
+                        soy + f64::from(w[0].y) * scap,
+                    ),
+                );
+                let b = rot(
+                    centre,
+                    scene.theta,
+                    Vec2::new(
+                        gx + f64::from(w[1].x) * scap,
+                        soy + f64::from(w[1].y) * scap,
+                    ),
+                );
+                flat_stroke(
+                    cv,
+                    a,
+                    b,
+                    f64::from(STROKE_RATIO) * 0.5 * scap * 1.36,
+                    theme.secondary_ink,
+                    1.05,
+                );
+            }
+        }
+    }
+}
+
 fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
     let centre = scene.card_centre;
     let layout = digital_layout(scene, theme);
     let cap = layout.cap;
     let rad = f64::from(STROKE_RATIO) * 0.5 * cap;
     let main = scene.text.as_str();
-    let suffix = scene.text.suffix_str();
-    let scap = layout.suffix_cap;
     let premium = theme.style == ClockStyle::PremiumMetalGlass;
 
     for (i, ch) in main.chars().enumerate() {
@@ -589,47 +634,7 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
             capsule(cv, p, p, dot_r * 0.86, glyph_ink, 1.05);
         }
     }
-    if !suffix.is_empty() {
-        let sox = layout.suffix_x;
-        let soy = layout.suffix_y;
-        for (i, ch) in suffix.chars().enumerate() {
-            let Some(g) = face_data::glyph(ch) else {
-                continue;
-            };
-            let gx = sox + i as f64 * (scap * f64::from(ADVANCE) + scap * 0.16);
-            for ln in g.lines {
-                if ln.len() < 2 {
-                    continue;
-                }
-                for w in ln.windows(2) {
-                    let a = rot(
-                        centre,
-                        scene.theta,
-                        Vec2::new(
-                            gx + f64::from(w[0].x) * scap,
-                            soy + f64::from(w[0].y) * scap,
-                        ),
-                    );
-                    let b = rot(
-                        centre,
-                        scene.theta,
-                        Vec2::new(
-                            gx + f64::from(w[1].x) * scap,
-                            soy + f64::from(w[1].y) * scap,
-                        ),
-                    );
-                    flat_stroke(
-                        cv,
-                        a,
-                        b,
-                        f64::from(STROKE_RATIO) * 0.5 * scap * 1.36,
-                        theme.secondary_ink,
-                        1.05,
-                    );
-                }
-            }
-        }
-    }
+    draw_suffix(cv, scene, theme, layout);
 }
 
 /// Paint a whole frame. `cv` is cleared first by the caller, since the caller knows whether the
@@ -719,14 +724,9 @@ fn paint_premium_attachment(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
     );
 }
 
-/// The plate body: one rounded-box distance field, evaluated under the inverse
-/// rotation so a tilted object needs no transformed render target. Gradient, rim and
-/// shadow band fall out of the same signed distance and corner half-widths.
-fn paint_plate(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
+fn paint_plate_shadow(cv: &mut Canvas, scene: &Scene, theme: &Theme, radius: f64) {
     let c = scene.card_centre;
-    let radius = scene.card_w.min(scene.card_h) * 0.5;
     let shadow = theme.shadow_alpha * scene.opacity;
-    let extent = radius + theme.shadow_blur * scene.scale + 3.0;
     if theme.style == ClockStyle::PremiumMetalGlass {
         circle_shadow(
             cv,
@@ -750,6 +750,16 @@ fn paint_plate(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
             shadow,
         );
     }
+}
+
+/// The plate body: one rounded-box distance field, evaluated under the inverse
+/// rotation so a tilted object needs no transformed render target. Gradient, rim and
+/// shadow band fall out of the same signed distance and corner half-widths.
+fn paint_plate(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
+    let c = scene.card_centre;
+    let radius = scene.card_w.min(scene.card_h) * 0.5;
+    let extent = radius + theme.shadow_blur * scene.scale + 3.0;
+    paint_plate_shadow(cv, scene, theme, radius);
     let x0 = (c.x - extent).floor() as i64;
     let x1 = (c.x + extent).ceil() as i64;
     let y0 = (c.y - extent).floor() as i64;
@@ -782,8 +792,7 @@ fn paint_plate(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
             } else if face_d <= 0.0 {
                 let glass = if theme.style == ClockStyle::PremiumMetalGlass {
                     let edge = (face_radius - p.dist(c)).max(0.0);
-                    let edge_flash =
-                        (1.0 - edge / (4.0 * scene.scale).max(1.0)).clamp(0.0, 1.0);
+                    let edge_flash = (1.0 - edge / (4.0 * scene.scale).max(1.0)).clamp(0.0, 1.0);
                     directional * (0.018 + 0.075 * edge_flash)
                 } else {
                     0.0
