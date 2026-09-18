@@ -378,7 +378,7 @@ fn digital_layout(scene: &Scene, theme: &Theme) -> DigitalLayout {
         let seconds_width = text_advance(secondary_count, seconds_cap);
         let face_radius = radius - theme.inset * scene.scale;
         let lower_edge = face_radius * 0.62;
-        let lower_y = scene.card_centre.y + radius * 0.24;
+        let lower_y = scene.card_centre.y + radius * 0.43;
         let suffix_cap = cap * suffix_ratio;
         return DigitalLayout {
             cap,
@@ -557,6 +557,51 @@ fn draw_suffix(cv: &mut Canvas, scene: &Scene, theme: &Theme, layout: DigitalLay
     }
 }
 
+#[derive(Clone, Copy)]
+struct GlyphStroke {
+    x: f64,
+    y: f64,
+    cap: f64,
+    radius: f64,
+    ink: Rgba,
+}
+
+fn draw_premium_line(cv: &mut Canvas, scene: &Scene, line: &[face_data::Pt], glyph: GlyphStroke) {
+    let centre = scene.card_centre;
+    let outline = Rgba::rgb(0.005, 0.006, 0.007, 0.74);
+    for (stroke_radius, colour) in [
+        (glyph.radius * 1.24, outline),
+        (glyph.radius * 0.86, glyph.ink),
+    ] {
+        for pair in line.windows(2) {
+            let point = |p: face_data::Pt| {
+                rot(
+                    centre,
+                    scene.theta,
+                    Vec2::new(
+                        glyph.x + f64::from(p.x) * glyph.cap,
+                        glyph.y + f64::from(p.y) * glyph.cap,
+                    ),
+                )
+            };
+            flat_stroke(cv, point(pair[0]), point(pair[1]), stroke_radius, colour, 1.05);
+        }
+        // Rounded joins only at internal vertices. The start and end remain deliberately flat,
+        // preserving the designed terminals while removing scallops from curved outlines.
+        for p in line.iter().copied().skip(1).take(line.len().saturating_sub(2)) {
+            let q = rot(
+                centre,
+                scene.theta,
+                Vec2::new(
+                    glyph.x + f64::from(p.x) * glyph.cap,
+                    glyph.y + f64::from(p.y) * glyph.cap,
+                ),
+            );
+            capsule(cv, q, q, stroke_radius, colour, 1.05);
+        }
+    }
+}
+
 fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
     let centre = scene.card_centre;
     let layout = digital_layout(scene, theme);
@@ -581,6 +626,21 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
             if ln.len() < 2 {
                 continue;
             }
+            if premium {
+                draw_premium_line(
+                    cv,
+                    scene,
+                    ln,
+                    GlyphStroke {
+                        x: gx,
+                        y: glyph_y,
+                        cap: glyph_cap,
+                        radius: glyph_rad,
+                        ink: glyph_ink,
+                    },
+                );
+                continue;
+            }
             for w in ln.windows(2) {
                 let a = rot(
                     centre,
@@ -598,16 +658,6 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
                         glyph_y + f64::from(w[1].y) * glyph_cap,
                     ),
                 );
-                if premium {
-                    flat_stroke(
-                        cv,
-                        a,
-                        b,
-                        glyph_rad * 1.24,
-                        Rgba::rgb(0.005, 0.006, 0.007, 0.74),
-                        1.05,
-                    );
-                }
                 flat_stroke(cv, a, b, glyph_rad * 0.86, glyph_ink, 1.05);
             }
         }
