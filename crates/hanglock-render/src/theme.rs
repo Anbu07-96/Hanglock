@@ -1,6 +1,8 @@
 //! Hanglock's colours and the few metrics that are style rather than geometry. 0.0..1.0 floats
 //! because the painter multiplies by coverage in f64 and converts once, at the write.
 
+use hanglock_core::ids::ClockStyle;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rgba {
     pub r: f64,
@@ -162,40 +164,3 @@ impl Theme {
         ClockStyle::ALL.map(Self::for_style)
     }
 }
-
-#[allow(dead_code)]
-fn legacy_theme_for_reference() -> Theme {
-    Theme {
-            style: ClockStyle::ModernMinimal,
-            plate_top: Rgba::rgb(0.150, 0.166, 0.188, 0.94),
-            plate_bottom: Rgba::rgb(0.072, 0.079, 0.092, 0.965),
-            rim: Rgba::rgb(1.0, 1.0, 1.0, 0.20),
-            rim_top: Rgba::rgb(1.0, 1.0, 1.0, 0.17),
-            rim_bottom: Rgba::rgb(0.0, 0.0, 0.0, 0.40),
-            ink: Rgba::rgb(0.965, 0.973, 0.985, 1.0),
-            accent: Rgba::rgb(0.44, 0.74, 0.99, 1.0),
-            // A mid-tone cord with a lit edge and a dark edge: near-black vanishes on a dark
-            // desktop, near-white vanishes on a document, and only the pair of them reads anywhere.
-            cord: Rgba::rgb(0.30, 0.325, 0.37, 0.95),
-            cord_lit: Rgba::rgb(0.82, 0.86, 0.92, 0.34),
-            cord_shadow: Rgba::rgb(0.0, 0.0, 0.0, 0.38),
-            mount: Rgba::rgb(0.085, 0.095, 0.115, 0.97),
-            shadow_alpha: 0.30,
-            shadow_blur: 7.5,
-            shadow_drop: 7.0,
-            time_cap: 0.34,
-            suffix_cap: 0.24,
-            suffix_gap: 0.18,
-            shell: Rgba::rgb(0.08, 0.08, 0.09, 1.0),
-            face: Rgba::rgb(0.10, 0.10, 0.11, 1.0),
-            inner_rim: Rgba::rgb(0.0, 0.0, 0.0, 0.3),
-            rope_width: 1.7,
-            rope_edge: 0.34,
-            rim_width: 4.0,
-            inset: 6.0,
-            eyelet_radius: 3.5,
-            eyelet_width: 1.25,
-            seconds_scale: 0.62,
-        }
-    }
-use hanglock_core::ids::ClockStyle;

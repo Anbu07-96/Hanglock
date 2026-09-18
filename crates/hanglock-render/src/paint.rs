@@ -9,8 +9,8 @@
 use crate::canvas::{centre, dist_seg, sdf_round_box, smooth, Canvas};
 use crate::face_data::{self, ADVANCE, STROKE_RATIO, TRACKING};
 use crate::theme::{Rgba, Theme};
-use hanglock_core::placement::Rect;
 use hanglock_core::ids::ClockStyle;
+use hanglock_core::placement::Rect;
 use hanglock_core::scene::Scene;
 use hanglock_core::vec2::Vec2;
 

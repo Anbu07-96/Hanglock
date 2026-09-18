@@ -121,14 +121,6 @@ fn general_group(s: &Settings, monitors: &[Monitor]) -> Group {
         title: "General",
         rows: vec![
             Row {
-                id: RowId::Style,
-                label: "Style",
-                control: Control::Choice {
-                    options: style_options(),
-                    selected: index_of_style(f.style),
-                },
-            },
-            Row {
                 id: RowId::LaunchAtLogin,
                 label: "Start with Windows",
                 control: Control::Check {
@@ -159,6 +151,14 @@ fn clock_group(s: &Settings) -> Group {
     Group {
         title: "Clock",
         rows: vec![
+            Row {
+                id: RowId::Style,
+                label: "Style",
+                control: Control::Choice {
+                    options: style_options(),
+                    selected: index_of_style(f.style),
+                },
+            },
             Row {
                 id: RowId::Hour12,
                 label: "12-hour clock",
