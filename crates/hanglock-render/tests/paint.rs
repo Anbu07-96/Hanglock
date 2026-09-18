@@ -63,7 +63,8 @@ fn every_untouched_pixel_is_exactly_transparent() {
     let (w, h) = (700u32, 400u32);
     let mut cv = Canvas::new(w, h);
     let sc = scene_at(0.0, Vec2::new(350.0, 180.0), face("10:42"));
-    paint(&sc, &mut cv, &Theme::default());
+    let theme = Theme::default();
+    paint(&sc, &mut cv, &theme);
     for (x, y) in [
         (0u32, 0u32),
         (w - 1, 0),
@@ -84,11 +85,13 @@ fn every_untouched_pixel_is_exactly_transparent() {
 fn the_plate_is_opaque_where_it_is_drawn() {
     let mut cv = Canvas::new(700, 400);
     let sc = scene_at(0.0, Vec2::new(350.0, 180.0), face("10:42"));
-    paint(&sc, &mut cv, &Theme::default());
+    let theme = Theme::default();
+    paint(&sc, &mut cv, &theme);
     let a = cv.alpha_at(350, 180);
     assert!(a > 200, "plate centre alpha {a}, expected an opaque plate");
     // The shadow band below the plate must be *partially* there, or the object is floating, not hung.
-    let below = cv.alpha_at(350, (180.0 + sc.card_h * 0.5 + 6.0) as u32);
+    let shadow_sample = sc.card_h * 0.5 + theme.shadow_drop + theme.shadow_blur * 0.5;
+    let below = cv.alpha_at(350, (180.0 + shadow_sample) as u32);
     assert!(
         below > 0 && below < a,
         "no soft shadow below the plate ({below} vs {a})"
