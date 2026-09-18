@@ -208,16 +208,52 @@ struct DigitalLayout {
     cap: f64,
     main_x: f64,
     y: f64,
+    primary_chars: usize,
+    seconds_cap: f64,
+    seconds_x: f64,
     suffix_cap: f64,
     suffix_x: f64,
 }
 
+impl DigitalLayout {
+    fn glyph(self, index: usize) -> (f64, f64) {
+        if index < self.primary_chars {
+            (
+                self.main_x
+                    + index as f64
+                        * (self.cap * f64::from(ADVANCE)
+                            + self.cap * f64::from(TRACKING)),
+                self.cap,
+            )
+        } else {
+            let i = index - self.primary_chars;
+            (
+                self.seconds_x
+                    + i as f64
+                        * (self.seconds_cap * f64::from(ADVANCE)
+                            + self.seconds_cap * f64::from(TRACKING)),
+                self.seconds_cap,
+            )
+        }
+    }
+}
+
 fn digital_layout(scene: &Scene, theme: &Theme) -> DigitalLayout {
     let radius = scene.card_w.min(scene.card_h) * 0.5;
-    let main_chars = scene.text.as_str().chars().count() as f64;
+    let main_count = scene.text.as_str().chars().count();
+    let secondary_count = usize::from(main_count >= 8) * 3;
+    let primary_count = main_count - secondary_count;
+    let main_chars = primary_count as f64;
+    let seconds_chars = secondary_count as f64;
     let suffix_chars = scene.text.suffix_str().chars().count() as f64;
-    let main_units =
+    let primary_units =
         (main_chars * (f64::from(ADVANCE) + f64::from(TRACKING)) - f64::from(TRACKING)).max(0.0);
+    let seconds_units = if seconds_chars > 0.0 {
+        0.16 + seconds_chars * (f64::from(ADVANCE) + f64::from(TRACKING)) * theme.seconds_scale
+            - f64::from(TRACKING) * theme.seconds_scale
+    } else {
+        0.0
+    };
     let suffix_ratio = theme.suffix_cap;
     let suffix_units = suffix_chars * (f64::from(ADVANCE) + 0.16) * suffix_ratio;
     let gap_ratio = if suffix_chars > 0.0 {
@@ -225,21 +261,25 @@ fn digital_layout(scene: &Scene, theme: &Theme) -> DigitalLayout {
     } else {
         0.0
     };
-    let units = (main_units + suffix_units + gap_ratio).max(1.0);
+    let units = (primary_units + seconds_units + suffix_units + gap_ratio).max(1.0);
     let cap = (scene.card_h * theme.time_cap)
         .min(radius * 0.58)
         .min(radius * 1.45 / units);
-    let main_width = main_units * cap;
+    let primary_width = primary_units * cap;
+    let seconds_width = seconds_units * cap;
     let gap = gap_ratio * cap;
     let suffix_width = suffix_units * cap;
-    let total = main_width + gap + suffix_width;
+    let total = primary_width + seconds_width + gap + suffix_width;
     let y = scene.card_centre.y - cap * 0.5;
     DigitalLayout {
         cap,
         main_x: scene.card_centre.x - total * 0.5,
         y,
+        primary_chars: primary_count,
+        seconds_cap: cap * theme.seconds_scale,
+        seconds_x: scene.card_centre.x - total * 0.5 + primary_width + 0.16 * cap,
         suffix_cap: cap * suffix_ratio,
-        suffix_x: scene.card_centre.x - total * 0.5 + main_width + gap,
+        suffix_x: scene.card_centre.x - total * 0.5 + primary_width + seconds_width + gap,
     }
 }
 
@@ -260,37 +300,44 @@ pub fn text_bounds(scene: &Scene, theme: &Theme) -> Rect {
     let mut b = [f64::MAX, f64::MAX, f64::MIN, f64::MIN];
     let main = scene.text.as_str();
     let suffix = scene.text.suffix_str();
-    let ox = layout.main_x;
     let oy = layout.y;
     let scap = layout.suffix_cap;
     for (i, ch) in main.chars().enumerate() {
         let Some(g) = face_data::glyph(ch) else {
             continue;
         };
-        let gx = ox + i as f64 * (cap * f64::from(ADVANCE) + cap * f64::from(TRACKING));
+        let (gx, glyph_cap) = layout.glyph(i);
         for ln in g.lines {
             for p in *ln {
                 let q = rot(
                     centre,
                     scene.theta,
-                    Vec2::new(gx + f64::from(p.x) * cap, oy + f64::from(p.y) * cap),
+                    Vec2::new(
+                        gx + f64::from(p.x) * glyph_cap,
+                        oy + (cap - glyph_cap) * 0.55 + f64::from(p.y) * glyph_cap,
+                    ),
                 );
-                b[0] = b[0].min(q.x - rad);
-                b[1] = b[1].min(q.y - rad);
-                b[2] = b[2].max(q.x + rad);
-                b[3] = b[3].max(q.y + rad);
+                let glyph_rad = rad * glyph_cap / cap;
+                b[0] = b[0].min(q.x - glyph_rad);
+                b[1] = b[1].min(q.y - glyph_rad);
+                b[2] = b[2].max(q.x + glyph_rad);
+                b[3] = b[3].max(q.y + glyph_rad);
             }
         }
         for d in g.dots {
+            let (gx, glyph_cap) = layout.glyph(i);
             let q = rot(
                 centre,
                 scene.theta,
-                Vec2::new(gx + f64::from(d.x) * cap, oy + f64::from(d.y) * cap),
+                Vec2::new(
+                    gx + f64::from(d.x) * glyph_cap,
+                    oy + (cap - glyph_cap) * 0.55 + f64::from(d.y) * glyph_cap,
+                ),
             );
-            b[0] = b[0].min(q.x - f64::from(d.r) * cap);
-            b[1] = b[1].min(q.y - f64::from(d.r) * cap);
-            b[2] = b[2].max(q.x + f64::from(d.r) * cap);
-            b[3] = b[3].max(q.y + f64::from(d.r) * cap);
+            b[0] = b[0].min(q.x - f64::from(d.r) * glyph_cap);
+            b[1] = b[1].min(q.y - f64::from(d.r) * glyph_cap);
+            b[2] = b[2].max(q.x + f64::from(d.r) * glyph_cap);
+            b[3] = b[3].max(q.y + f64::from(d.r) * glyph_cap);
         }
     }
     if !suffix.is_empty() {
@@ -329,7 +376,6 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
     let rad = f64::from(STROKE_RATIO) * 0.5 * cap;
     let main = scene.text.as_str();
     let suffix = scene.text.suffix_str();
-    let ox = layout.main_x;
     let oy = layout.y;
     let scap = layout.suffix_cap;
 
@@ -337,7 +383,8 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
         let Some(g) = face_data::glyph(ch) else {
             continue;
         };
-        let gx = ox + i as f64 * (cap * f64::from(ADVANCE) + cap * f64::from(TRACKING));
+        let (gx, glyph_cap) = layout.glyph(i);
+        let glyph_y = oy + (cap - glyph_cap) * 0.55;
         for ln in g.lines {
             if ln.len() < 2 {
                 continue;
@@ -346,23 +393,39 @@ fn draw_text(cv: &mut Canvas, scene: &Scene, theme: &Theme) {
                 let a = rot(
                     centre,
                     scene.theta,
-                    Vec2::new(gx + f64::from(w[0].x) * cap, oy + f64::from(w[0].y) * cap),
+                    Vec2::new(
+                        gx + f64::from(w[0].x) * glyph_cap,
+                        glyph_y + f64::from(w[0].y) * glyph_cap,
+                    ),
                 );
                 let b = rot(
                     centre,
                     scene.theta,
-                    Vec2::new(gx + f64::from(w[1].x) * cap, oy + f64::from(w[1].y) * cap),
+                    Vec2::new(
+                        gx + f64::from(w[1].x) * glyph_cap,
+                        glyph_y + f64::from(w[1].y) * glyph_cap,
+                    ),
                 );
-                flat_stroke(cv, a, b, rad, theme.ink, 1.05);
+                flat_stroke(cv, a, b, rad * glyph_cap / cap, theme.ink, 1.05);
             }
         }
         for d in g.dots {
             let p = rot(
                 centre,
                 scene.theta,
-                Vec2::new(gx + f64::from(d.x) * cap, oy + f64::from(d.y) * cap),
+                Vec2::new(
+                    gx + f64::from(d.x) * glyph_cap,
+                    glyph_y + f64::from(d.y) * glyph_cap,
+                ),
             );
-            capsule(cv, p, p, f64::from(d.r) * cap * 0.95, theme.ink, 1.05);
+            capsule(
+                cv,
+                p,
+                p,
+                f64::from(d.r) * glyph_cap * 0.95,
+                theme.ink,
+                1.05,
+            );
         }
     }
     if !suffix.is_empty() {
